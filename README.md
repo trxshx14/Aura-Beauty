@@ -1,4 +1,4 @@
-# 🌟 Aura Beauty — Immersive 3D Scrollytelling Product Showcase
+#  Aura Beauty — Immersive 3D Product Showcase
 
 [![Framework: Next.js](https://img.shields.io/badge/Framework-Next.js%2014-000000?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![3D Engine: R3F](https://img.shields.io/badge/3D%20Engine-React%20Three%20Fiber-blue?style=flat-square&logo=three.js)](https://docs.pmnd.rs/react-three-fiber/getting-started/introduction)
@@ -11,21 +11,21 @@ Rather than relying on static images, the interface uses a full-screen WebGL can
 
 ---
 
-## ✨ Core Features & UX Decisions
+##  Core Features & UX Decisions
 
-### 🎨 The Aesthetics & UI Design
+###  The Aesthetics & UI Design
 * **Warm Minimalism & Editorial Layout:** Designed around a soft, accessible color palette—featuring Creamy Vanilla (`#FBF7F4`), Soft Blush (`#F3E1DC`), and Warm Charcoal (`#2B2927`).
 * **Micro-Interactions:** Subtle mouse-tracking physics make the 3D asset dynamically tilt and catch studio reflections based on the user's cursor position.
 * **Typographic Hierarchy:** Paired sophisticated serif headings with highly clean, legible sans-serif body copy to prioritize text accessibility alongside immersive visual storytelling.
 
-### ⚙️ Technical Frontend Execution
+###  Technical Frontend Execution
 * **Decoupled Scrollytelling Layer Architecture:** Implemented a fixed full-screen WebGL canvas background perfectly synchronized with a semantic, high-performance HTML scroll container layer.
 * **Buttery-Smooth Scrubbing:** Utilized GSAP `ScrollTrigger` with customized interpolation (`scrub: 1`) to eliminate browser scrolling jitter and bind complex 3D camera properties straight to the scroll track.
 * **Shader Material Crafting:** Developed custom frosted-glass and liquid-ribbon simulation materials using Three.js `<meshPhysicalMaterial />`, keeping roughness, transmission, and thickness fully performant at 60 FPS.
 
 ---
 
-## 🛠️ Tech Stack & Dependencies
+##  Tech Stack & Dependencies
 
 * **Framework:** Next.js (React / TypeScript)
 * **Styling:** Tailwind CSS (Fluid typography and layout constraints)
