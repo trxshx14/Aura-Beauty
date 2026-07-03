@@ -5,7 +5,7 @@
 [![Animation: GSAP](https://img.shields.io/badge/Animation-GSAP%20ScrollTrigger-green?style=flat-square)](https://gsap.com/)
 [![Design: Figma](https://img.shields.io/badge/Design-Figma-F24E1E?style=flat-square&logo=figma)](https://www.figma.com/)
 
-Aura Beauty is a high-performance, interactive 3D scrollytelling web experience built for a fictional premium minimalist cosmetics brand. This project serves as a portfolio showcase demonstrating the seamless intersection of advanced **Frontend Engineering** and intentional **UX/UI Design**.
+Aura Beauty is a high-performance, interactive 3D web experience built for a fictional premium minimalist cosmetics brand. This project serves as a portfolio showcase demonstrating the seamless intersection of advanced **Frontend Engineering** and intentional **UX/UI Design**.
 
 Rather than relying on static images, the interface uses a full-screen WebGL canvas mapped to the browser's scroll depth. As the user navigates, a responsive 3D product asset transforms, rotates, and morphs dynamically to guide the user through the product’s formulation, texture, and application steps.
 
