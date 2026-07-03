@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
-import { Environment, Float, Lightformer, SoftShadows } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import {
+  Environment,
+  Float,
+  Lightformer,
+  MeshReflectorMaterial,
+  SoftShadows,
+  Sparkles,
+} from "@react-three/drei";
 import * as THREE from "three";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -11,19 +18,18 @@ gsap.registerPlugin(ScrollTrigger);
 ScrollTrigger.config({ ignoreMobileResize: true });
 
 /* -------------------------------------------------------------------------- */
-/*  Palette — abstract pastel surrealism on a warm studio base                 */
+/*  Palette                                                                    */
 /* -------------------------------------------------------------------------- */
 
 const PALETTE = {
-  vanilla: "#FBF7F4", // page + floor (shadows appear to float on the page)
-  pink: "#F2C9C0", // millennial pastel pink
-  terracotta: "#C97B5D", // terracotta clay
-  nude: "#E8D5C4", // warm nude beige
-  amber: "#E8A852", // soft marigold amber
+  vanilla: "#FBF7F4",
+  pink: "#F2C9C0",
+  terracotta: "#C97B5D",
+  nude: "#E8D5C4",
+  amber: "#E8A852",
   charcoal: "#2B2927",
 } as const;
 
-/** Matte "clay" finish shared by all stage architecture. */
 function clay(color: string) {
   return new THREE.MeshStandardMaterial({
     color: new THREE.Color(color),
@@ -33,25 +39,29 @@ function clay(color: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Bottle materials (frosted glass + blush cap)                               */
+/*  Bottle materials — glass, cap, and the serum liquid inside                 */
 /* -------------------------------------------------------------------------- */
 
 type BottleMaterials = {
   glass: THREE.MeshPhysicalMaterial;
   cap: THREE.MeshStandardMaterial;
+  liquid: THREE.MeshPhysicalMaterial;
 };
 
 function useBottleMaterials(): BottleMaterials {
   return useMemo(
     () => ({
       glass: new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color("#F5E2DB"),
-        roughness: 0.2,
+        color: new THREE.Color("#F7EAE4"),
+        roughness: 0.15,
         transmission: 0.7,
         thickness: 1,
         ior: 1.4,
-        clearcoat: 0.6,
-        clearcoatRoughness: 0.35,
+        clearcoat: 0.7,
+        clearcoatRoughness: 0.3,
+        iridescence: 0.15, // faint premium sheen on grazing angles
+        iridescenceIOR: 1.3,
+        envMapIntensity: 1.2,
         attenuationColor: new THREE.Color(PALETTE.pink),
         attenuationDistance: 2.5,
         transparent: true,
@@ -61,8 +71,16 @@ function useBottleMaterials(): BottleMaterials {
         color: new THREE.Color(PALETTE.nude),
         roughness: 0.5,
         metalness: 0.05,
+      }),
+      // The serum itself, visible through the frosted glass. The shade
+      // picker tints THIS — the product changes, the vessel stays.
+      liquid: new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color("#EFC0A6"),
+        roughness: 0.35,
+        transmission: 0.4,
+        thickness: 0.8,
         transparent: true,
-        opacity: 1,
+        opacity: 0.92,
       }),
     }),
     []
@@ -70,7 +88,7 @@ function useBottleMaterials(): BottleMaterials {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Scene object refs — one bag of refs shared with the scroll rig             */
+/*  Scene refs                                                                 */
 /* -------------------------------------------------------------------------- */
 
 type StageRefs = {
@@ -84,7 +102,8 @@ type StageRefs = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*  Product bottle                                                             */
+/*  Product bottle — Float (idle hover) wraps a slow turntable spin, both      */
+/*  nested INSIDE the GSAP-driven group so the three motions compose.          */
 /* -------------------------------------------------------------------------- */
 
 function ProductBottle({
@@ -94,32 +113,48 @@ function ProductBottle({
   groupRef: StageRefs["bottle"];
   materials: BottleMaterials;
 }) {
+  const spinRef = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    if (spinRef.current) spinRef.current.rotation.y += delta * 0.12;
+  });
+
   return (
     <group ref={groupRef}>
-      <Float speed={1.3} rotationIntensity={0.12} floatIntensity={0.35}>
-        <mesh castShadow material={materials.glass}>
-          <cylinderGeometry args={[0.55, 0.55, 1.6, 64]} />
-        </mesh>
-        <mesh
-          castShadow
-          material={materials.glass}
-          position={[0, 0.8, 0]}
-          scale={[1, 0.35, 1]}
-        >
-          <sphereGeometry args={[0.55, 48, 32]} />
-        </mesh>
-        <mesh castShadow material={materials.cap} position={[0, 1.12, 0]}>
-          <cylinderGeometry args={[0.28, 0.3, 0.42, 48]} />
-        </mesh>
+      <Float speed={1.3} rotationIntensity={0.1} floatIntensity={0.3}>
+        <group ref={spinRef}>
+          {/* Serum inside — reads through the frosted glass */}
+          <mesh position={[0, -0.15, 0]} material={materials.liquid}>
+            <cylinderGeometry args={[0.46, 0.46, 1.15, 48]} />
+          </mesh>
+
+          {/* Glass body */}
+          <mesh castShadow material={materials.glass}>
+            <cylinderGeometry args={[0.55, 0.55, 1.6, 64]} />
+          </mesh>
+
+          {/* Rounded shoulder */}
+          <mesh
+            castShadow
+            material={materials.glass}
+            position={[0, 0.8, 0]}
+            scale={[1, 0.35, 1]}
+          >
+            <sphereGeometry args={[0.55, 48, 32]} />
+          </mesh>
+
+          {/* Cap */}
+          <mesh castShadow material={materials.cap} position={[0, 1.12, 0]}>
+            <cylinderGeometry args={[0.28, 0.3, 0.42, 48]} />
+          </mesh>
+        </group>
       </Float>
     </group>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Studio stage — geometric pedestals, steps, and floating accents            */
-/*  All positions are set by ScrollRig (viewport-relative), so meshes render   */
-/*  at origin here and get placed once measurements are known.                 */
+/*  Studio stage                                                               */
 /* -------------------------------------------------------------------------- */
 
 function StudioStage({ refs }: { refs: StageRefs }) {
@@ -129,89 +164,121 @@ function StudioStage({ refs }: { refs: StageRefs }) {
       terracotta: clay(PALETTE.terracotta),
       pink: clay(PALETTE.pink),
       amber: clay(PALETTE.amber),
-      floor: new THREE.MeshStandardMaterial({
-        color: new THREE.Color(PALETTE.vanilla),
-        roughness: 1,
-        metalness: 0,
-      }),
     }),
     []
   );
 
   return (
     <>
-      {/* Infinite studio floor — same color as the page, so only the cast
-          shadows are perceived, "floating" on the vanilla background. */}
-      <mesh
-        receiveShadow
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -1.45, 0]}
-        material={mats.floor}
-      >
+      {/* Reflective studio floor — soft, blurred reflections under every
+          object. The single biggest "rendered, not real-time" illusion.
+          If FPS dips on weaker GPUs: drop resolution to 256, or swap back
+          to a plain MeshStandardMaterial. */}
+      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.45, 0]}>
         <planeGeometry args={[80, 80]} />
+        <MeshReflectorMaterial
+          color={PALETTE.vanilla}
+          roughness={0.85}
+          metalness={0}
+          mirror={0}
+          resolution={512}
+          blur={[300, 80]}
+          mixBlur={1}
+          mixStrength={1.6}
+          depthScale={0.8}
+          minDepthThreshold={0.85}
+        />
       </mesh>
 
-      {/* Hero pedestal — the bottle's plinth in Section 1 */}
+      {/* Hero pedestal */}
       <group ref={refs.heroPedestal}>
         <mesh castShadow receiveShadow material={mats.nude}>
           <cylinderGeometry args={[0.95, 0.95, 0.5, 64]} />
         </mesh>
-        {/* thin terracotta reveal line under the plinth top */}
         <mesh castShadow material={mats.terracotta} position={[0, -0.18, 0]}>
           <cylinderGeometry args={[0.97, 0.97, 0.06, 64]} />
         </mesh>
       </group>
 
-      {/* Side pedestal — rises from below in Milestone 2 to catch the bottle */}
+      {/* Side pedestal — rises in Milestone 2 */}
       <group ref={refs.sidePedestal}>
         <mesh castShadow receiveShadow material={mats.terracotta}>
           <cylinderGeometry args={[0.8, 0.8, 1.1, 64]} />
         </mesh>
       </group>
 
-      {/* Geometric steps — stacked offset slabs, back-left of the stage */}
+      {/* Geometric steps — pushed deep into the fog so they read as a soft
+          backdrop behind the headline instead of colliding with it */}
       <group ref={refs.steps}>
-        <mesh castShadow receiveShadow material={mats.terracotta} position={[0, 0, 0]}>
+        <mesh castShadow receiveShadow material={mats.terracotta}>
           <boxGeometry args={[2.6, 0.4, 2.6]} />
         </mesh>
-        <mesh
-          castShadow
-          receiveShadow
-          material={mats.nude}
-          position={[-0.5, 0.4, 0.4]}
-        >
+        <mesh castShadow receiveShadow material={mats.nude} position={[-0.5, 0.4, 0.4]}>
           <boxGeometry args={[1.9, 0.4, 1.9]} />
         </mesh>
-        <mesh
-          castShadow
-          receiveShadow
-          material={mats.pink}
-          position={[-0.9, 0.8, 0.7]}
-        >
+        <mesh castShadow receiveShadow material={mats.pink} position={[-0.9, 0.8, 0.7]}>
           <boxGeometry args={[1.2, 0.4, 1.2]} />
         </mesh>
       </group>
 
-      {/* Marigold sphere — free-floating amber accent */}
+      {/* Marigold sphere */}
       <mesh ref={refs.sphere} castShadow material={mats.amber}>
         <sphereGeometry args={[0.38, 48, 48]} />
       </mesh>
 
-      {/* Pastel ring — a halo that travels with the bottle between acts */}
+      {/* Pastel ring */}
       <mesh ref={refs.ring} material={mats.pink}>
         <torusGeometry args={[1.55, 0.055, 24, 96]} />
       </mesh>
 
-      {/* Distant terracotta monolith — depth anchor in the fog */}
+      {/* Distant monolith, deep in the fog */}
       <mesh ref={refs.column} castShadow material={mats.terracotta}>
         <boxGeometry args={[0.9, 6.5, 0.9]} />
       </mesh>
+
+      {/* Dust motes drifting through the key light — beauty-commercial air */}
+      <Sparkles
+        count={70}
+        scale={[14, 6, 8]}
+        position={[0, 0.6, -1]}
+        size={2.5}
+        speed={0.25}
+        opacity={0.35}
+        color={PALETTE.amber}
+      />
     </>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Scroll rig — one master timeline drives 3D + HTML from the same progress   */
+/*  Mouse-parallax camera — the scene leans gently toward the cursor.          */
+/*  Lerped every frame, so it's silky; disabled for reduced-motion users;      */
+/*  inert on touch devices (pointer stays at 0,0).                             */
+/* -------------------------------------------------------------------------- */
+
+function CameraParallax() {
+  const { camera, pointer } = useThree();
+  const enabled = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    []
+  );
+
+  useFrame(() => {
+    if (!enabled) return;
+    const targetX = pointer.x * 0.35;
+    const targetY = 0.2 + pointer.y * 0.2;
+    camera.position.x += (targetX - camera.position.x) * 0.05;
+    camera.position.y += (targetY - camera.position.y) * 0.05;
+    camera.lookAt(0, -0.1, 0);
+  });
+
+  return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Scroll rig — one master timeline for 3D + HTML                             */
 /* -------------------------------------------------------------------------- */
 
 function ScrollRig({
@@ -231,34 +298,26 @@ function ScrollRig({
     const sphere = refs.sphere.current;
     const ring = refs.ring.current;
     const column = refs.column.current;
-    if (
-      !bottle ||
-      !heroPedestal ||
-      !sidePedestal ||
-      !steps ||
-      !sphere ||
-      !ring ||
-      !column
-    )
+    if (!bottle || !heroPedestal || !sidePedestal || !steps || !sphere || !ring || !column)
       return;
 
     const vw = viewport.width;
     const HERO_X = vw * 0.22;
     const EDGE_X = vw * 0.3;
 
-    // ---- Initial composition (Section 1) — shared by both motion branches --
     const setInitialPose = () => {
       bottle.position.set(HERO_X, -0.05, 0);
       bottle.rotation.set(0, -0.4, 0.05);
       bottle.scale.setScalar(1);
 
       heroPedestal.position.set(HERO_X, -1.2, 0);
-      sidePedestal.position.set(EDGE_X, -3.4, 0.2); // hidden under the floor
-      steps.position.set(-vw * 0.1, -1.25, -2.6);
-      sphere.position.set(vw * 0.04, -0.7, -1.2);
+      sidePedestal.position.set(EDGE_X, -3.4, 0.2);
+      // Backdrop depth: far enough into the fog to sit BEHIND the type
+      steps.position.set(-vw * 0.18, -1.3, -3.4);
+      sphere.position.set(vw * 0.05, -0.7, -1.4);
       ring.position.set(HERO_X, 0.15, -2.1);
       ring.rotation.set(0, 0, 0.2);
-      column.position.set(-vw * 0.28, 1.4, -4.5);
+      column.position.set(-vw * 0.3, 1.4, -6);
     };
 
     const mm = gsap.matchMedia();
@@ -277,20 +336,20 @@ function ScrollRig({
         },
       });
 
-      /* ---------------- Milestone 1 · t ∈ [0, 1] — macro zoom ----------------
-         Bottle lifts off its plinth toward the camera; the stage architecture
-         parallaxes apart to make room; the pastel ring becomes a halo. */
+      /* ------- Milestone 1 · t ∈ [0, 1] — restrained macro zoom -------
+         The bottle presents itself in the channel between the headline
+         (left) and the ledger card (right): closer, taller, but never a
+         wall of glass. */
       tl.to(bottle.rotation, { y: `+=${Math.PI}`, duration: 1 }, 0)
-        .to(bottle.scale, { x: 1.32, y: 1.32, z: 1.32, duration: 1 }, 0)
-        .to(bottle.position, { x: 0, y: 0.15, z: 1.6, duration: 1 }, 0)
+        .to(bottle.scale, { x: 1.12, y: 1.12, z: 1.12, duration: 1 }, 0)
+        .to(bottle.position, { x: 0, y: 0.1, z: 0.9, duration: 1 }, 0)
         .to(heroPedestal.position, { y: -2.7, duration: 1 }, 0)
-        .to(steps.position, { x: `-=${1.6}`, y: "-=1.4", z: "-=2", duration: 1 }, 0)
-        .to(sphere.position, { x: -vw * 0.12, y: 0.45, duration: 1 }, 0)
-        .to(ring.position, { x: 0, y: 0.15, duration: 1 }, 0)
+        .to(steps.position, { x: `-=${1.4}`, y: "-=1.2", duration: 1 }, 0)
+        .to(sphere.position, { x: -vw * 0.1, y: 0.5, duration: 1 }, 0)
+        .to(ring.position, { x: 0, y: 0.1, duration: 1 }, 0)
         .to(ring.rotation, { z: "+=0.6", duration: 1 }, 0)
-        .to(ring.scale, { x: 1.25, y: 1.25, z: 1.25, duration: 1 }, 0)
-        .to(column.position, { x: `-=${vw * 0.06}`, duration: 1 }, 0)
-        // HTML layer, same timeline — phase-locked with the 3D
+        .to(ring.scale, { x: 1.2, y: 1.2, z: 1.2, duration: 1 }, 0)
+        .to(column.position, { x: `-=${vw * 0.05}`, duration: 1 }, 0)
         .to("[data-panel='hero']", { autoAlpha: 0, y: -40, duration: 0.35 }, 0.05)
         .fromTo(
           "[data-panel='formula']",
@@ -298,13 +357,16 @@ function ScrollRig({
           { autoAlpha: 1, y: 0, duration: 0.4 },
           0.5
         )
-        // progress rail: 01 → 02
+        .fromTo(
+          "[data-formula-row]",
+          { autoAlpha: 0, x: -24 },
+          { autoAlpha: 1, x: 0, duration: 0.25, stagger: 0.07 },
+          0.62
+        )
         .to("[data-progress='1']", { opacity: 0.3, duration: 0.2 }, 0.5)
         .to("[data-progress='2']", { opacity: 1, duration: 0.2 }, 0.5);
 
-      /* ------------- Milestone 2 · t ∈ [1, 2] — the shade counter -----------
-         Bottle glides right; a terracotta pedestal rises through the floor to
-         catch it. The bottle STAYS visible — the shade picker tints it live. */
+      /* ------- Milestone 2 · t ∈ [1, 2] — the shade counter ------- */
       tl.to("[data-panel='formula']", { autoAlpha: 0, y: -40, duration: 0.3 }, 1.0)
         .to(bottle.position, { x: EDGE_X, y: -0.15, z: 0.3, duration: 1 }, 1)
         .to(bottle.rotation, { y: `+=${Math.PI * 0.35}`, duration: 1 }, 1)
@@ -313,50 +375,47 @@ function ScrollRig({
         .to(ring.position, { x: EDGE_X, duration: 1 }, 1)
         .to(ring.rotation, { z: "+=0.4", duration: 1 }, 1)
         .to(ring.scale, { x: 0.9, y: 0.9, z: 0.9, duration: 1 }, 1)
-        .to(sphere.position, { x: -vw * 0.05, y: -0.95, duration: 1 }, 1)
+        .to(sphere.position, { x: -vw * 0.02, y: -0.95, duration: 1 }, 1)
         .fromTo(
           "[data-panel='shades']",
           { autoAlpha: 0, y: 56 },
           { autoAlpha: 1, y: 0, duration: 0.4 },
           1.5
         )
-        // progress rail: 02 → 03
         .to("[data-progress='2']", { opacity: 0.3, duration: 0.2 }, 1.5)
         .to("[data-progress='3']", { opacity: 1, duration: 0.2 }, 1.5);
     });
 
-    // Reduced motion: static composition, all content readable.
     mm.add("(prefers-reduced-motion: reduce)", () => {
       setInitialPose();
       gsap.set(
-        "[data-panel='hero'], [data-panel='formula'], [data-panel='shades'], [data-progress]",
-        { autoAlpha: 1, y: 0, opacity: 1 }
+        "[data-panel='hero'], [data-panel='formula'], [data-panel='shades'], [data-formula-row], [data-progress]",
+        { autoAlpha: 1, y: 0, x: 0, opacity: 1 }
       );
     });
 
     return () => mm.revert();
   }, [viewport.width, refs, materials]);
 
-  /* ---- Live shade tinting: DOM UI → WebGL bridge -------------------------
-     The shade picker dispatches a CustomEvent; we tween the physical glass
-     color toward a lightened version of the swatch. No scroll involvement —
-     this runs on top of whatever the scrub timeline is doing. */
+  /* ---- DOM → WebGL bridge: shade selection tints the SERUM ------------- */
   useEffect(() => {
     const onShade = (e: Event) => {
       const hex = (e as CustomEvent<string>).detail;
-      const target = new THREE.Color(hex).lerp(new THREE.Color("#ffffff"), 0.45);
-      const atten = new THREE.Color(hex).lerp(new THREE.Color("#ffffff"), 0.2);
-      gsap.to(materials.glass.color, {
-        r: target.r,
-        g: target.g,
-        b: target.b,
+      // Liquid takes the shade almost verbatim (the product changes)...
+      const liquidTint = new THREE.Color(hex).lerp(new THREE.Color("#ffffff"), 0.15);
+      // ...while the glass only warms toward it (the vessel stays glass).
+      const glassTint = new THREE.Color(hex).lerp(new THREE.Color("#ffffff"), 0.65);
+      gsap.to(materials.liquid.color, {
+        r: liquidTint.r,
+        g: liquidTint.g,
+        b: liquidTint.b,
         duration: 0.7,
         ease: "power2.out",
       });
       gsap.to(materials.glass.attenuationColor, {
-        r: atten.r,
-        g: atten.g,
-        b: atten.b,
+        r: glassTint.r,
+        g: glassTint.g,
+        b: glassTint.b,
         duration: 0.7,
         ease: "power2.out",
       });
@@ -392,15 +451,9 @@ export default function ThreeScene() {
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
       shadows
     >
-      {/* Depth fade: distant stage elements melt into the page color —
-          this is what sells the "infinite studio" cyclorama look. */}
       <fog attach="fog" args={[PALETTE.vanilla, 7, 15]} />
-
-      {/* PCSS soft shadows — penumbra widens with distance, the signature
-          "Octane render" softness. Tune `samples` down if perf dips. */}
       <SoftShadows size={24} samples={12} focus={0.6} />
 
-      {/* ------------------------- Studio lighting ------------------------ */}
       <ambientLight intensity={0.55} color={PALETTE.vanilla} />
       <directionalLight
         castShadow
@@ -417,7 +470,6 @@ export default function ThreeScene() {
       <directionalLight position={[-6, 3, -5]} intensity={0.7} color="#f6e3d8" />
       <pointLight position={[0, -2.5, 3]} intensity={0.3} color={PALETTE.pink} />
 
-      {/* Procedural studio HDRI — local Lightformers, zero network fetch */}
       <Environment resolution={256}>
         <Lightformer intensity={2} position={[0, 5, -9]} scale={[10, 10, 1]} />
         <Lightformer
@@ -443,6 +495,7 @@ export default function ThreeScene() {
       <StudioStage refs={refs} />
       <ProductBottle groupRef={refs.bottle} materials={materials} />
       <ScrollRig refs={refs} materials={materials} />
+      <CameraParallax />
     </Canvas>
   );
 }
