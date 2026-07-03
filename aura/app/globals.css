@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Scrollytelling hygiene ---------------------------------------------------
+
+   1. No horizontal overflow — the bottle is intentionally pushed toward the
+      right edge in Section 3 and must never spawn a horizontal scrollbar,
+      which would desync ScrollTrigger's measurements.
+   2. A stable scrollbar gutter prevents a layout shift (and a ScrollTrigger
+      refresh) the instant the page becomes scrollable.                     */
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html,
+body {
+  overflow-x: hidden;
+  background-color: #fbf7f4;
+}
+
+/* The WebGL canvas paints every frame during scrub — promote it to its own
+   compositor layer so the browser never repaints it with the DOM. */
+canvas {
+  display: block;
+  transform: translateZ(0);
+}
