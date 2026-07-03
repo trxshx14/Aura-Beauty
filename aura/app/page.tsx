@@ -42,10 +42,10 @@ const SHADES = [
 type Shade = (typeof SHADES)[number];
 
 const INGREDIENTS = [
-  ["Squalane", "barrier repair"],
-  ["Rice ferment", "luminosity"],
-  ["Blush clay", "gentle refinement"],
-  ["Oat lipids", "calm + comfort"],
+  ["Niacinamide", "barrier repair"],
+  ["Salycic Acid", "luminosity"],
+  ["Azelaic Acid", "gentle refinement"],
+  ["Aloe Vera", "calm + comfort"],
 ] as const;
 
 const MARQUEE_ITEMS = [
@@ -376,11 +376,11 @@ export default function Page() {
               <MagneticButton
                 className="mt-12 rounded-full bg-[#2B2927] px-10 py-4 text-xs font-medium uppercase tracking-[0.3em] text-[#FBF7F4] transition-colors duration-300 hover:bg-[#C97B5D] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B2927] focus-visible:ring-offset-4 focus-visible:ring-offset-[#FBF7F4]"
               >
-                Add to bag — $68
+                Add to bag — ₱1,500
               </MagneticButton>
 
               <p className="mt-14 text-[10px] uppercase tracking-[0.3em] text-[#2B2927]/35">
-                Aura Beauty © 2026 — Designed &amp; built by You
+                Aura Beauty © 2026 — Designed &amp; built by Trisha Raye
               </p>
             </div>
           </div>
