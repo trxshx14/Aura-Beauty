@@ -394,7 +394,7 @@ export default function ThreeScene() {
     >
       {/* Depth fade: distant stage elements melt into the page color —
           this is what sells the "infinite studio" cyclorama look. */}
-      <fog attach="fog" args={[PALETTE.vanilla, 9, 19]} />
+      <fog attach="fog" args={[PALETTE.vanilla, 7, 15]} />
 
       {/* PCSS soft shadows — penumbra widens with distance, the signature
           "Octane render" softness. Tune `samples` down if perf dips. */}

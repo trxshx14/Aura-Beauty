@@ -1,14 +1,11 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 entry point.
+   ⚠️ The old `@tailwind base/components/utilities` directives must NOT
+   appear anywhere in this file — with v4 they half-work (keyword utilities
+   compile, but spacing scales and breakpoints silently fail), which is
+   exactly the "styled but broken layout" failure mode.                    */
+@import "tailwindcss";
 
-/* Scrollytelling hygiene ---------------------------------------------------
-
-   1. No horizontal overflow — the bottle is intentionally pushed toward the
-      right edge in Section 3 and must never spawn a horizontal scrollbar,
-      which would desync ScrollTrigger's measurements.
-   2. A stable scrollbar gutter prevents a layout shift (and a ScrollTrigger
-      refresh) the instant the page becomes scrollable.                     */
+/* Scrollytelling hygiene --------------------------------------------------- */
 
 html {
   scrollbar-gutter: stable;
@@ -20,9 +17,65 @@ body {
   background-color: #fbf7f4;
 }
 
-/* The WebGL canvas paints every frame during scrub — promote it to its own
-   compositor layer so the browser never repaints it with the DOM. */
+/* The WebGL canvas paints every frame during scrub — promote it to its
+   own compositor layer so the browser never repaints it with the DOM. */
 canvas {
   display: block;
   transform: translateZ(0);
+}
+
+/* Brand-colored text selection */
+::selection {
+  background: #f2c9c0;
+  color: #2b2927;
+}
+
+/* Motion primitives -------------------------------------------------------- */
+
+/* Infinite marquee: the track holds two identical copies of the content
+   and slides by exactly one copy's width (-50%), so the loop is seamless. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 28s linear infinite;
+}
+
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* Shade-name swap: re-triggered on every selection via a changing React
+   `key`, which remounts the element and replays the animation. */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Accessibility: kill decorative motion for users who ask for less. */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+  .animate-fade-up {
+    animation: none;
+  }
 }
