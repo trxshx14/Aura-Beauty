@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { ContactShadows, Environment, Float } from "@react-three/drei";
+import { ContactShadows, Environment, Float, Lightformer} from "@react-three/drei";
 import * as THREE from "three";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -243,8 +243,16 @@ export default function ThreeScene() {
       <pointLight position={[0, -3, 2]} intensity={0.35} color="#F3E1DC" />
 
       {/* HDRI reflections — essential for believable glass transmission */}
-      <Environment preset="studio" />
-
+      <Environment resolution={256}>
+  {/* Overhead softbox */}
+  <Lightformer intensity={2} position={[0, 5, -9]} scale={[10, 10, 1]} />
+  {/* Left + right wall panels — these create the long vertical
+      reflections that make the glass read as "studio-lit" */}
+  <Lightformer intensity={1.5} position={[-5, 1, -1]} rotation-y={Math.PI / 2} scale={[12, 4, 1]} />
+  <Lightformer intensity={1.5} position={[10, 1, 0]} rotation-y={-Math.PI / 2} scale={[16, 2, 1]} />
+  {/* Blush bounce card from below, matching the brand accent */}
+  <Lightformer intensity={1} color="#F3E1DC" position={[0, -2, 5]} scale={[8, 3, 1]} />
+</Environment>
       <ProductBottle groupRef={bottleRef} materials={materials} />
 
       {/* Soft grounding shadow (cheaper + softer than a shadow-catcher plane) */}

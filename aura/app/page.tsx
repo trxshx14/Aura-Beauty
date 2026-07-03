@@ -7,7 +7,7 @@ import { useState } from "react";
  * The 3D scene is client-only (WebGL). Loading it dynamically with ssr:false
  * keeps the Next.js server render clean and avoids hydration mismatches.
  */
-const ThreeScene = dynamic(() => import("@/components/ThreeScene"), {
+const ThreeScene = dynamic(() => import("../components/ThreeScene"), {
   ssr: false,
 });
 
