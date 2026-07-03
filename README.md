@@ -34,11 +34,12 @@ Rather than relying on static images, the interface uses a full-screen WebGL can
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 Follow these steps to run the development server locally:
 
 1. **Clone the repository:**
    ```bash
    git clone [https://github.com/your-username/aura-beauty.git](https://github.com/your-username/aura-beauty.git)
-   cd aura-beauty
+   cd Aura Beauty
+   npm run dev
