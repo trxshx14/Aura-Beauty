@@ -80,7 +80,7 @@ export function createBottleKit(): BottleKit {
     lip: new THREE.TorusGeometry(0.25, 0.018, 12, 64),
     bulb: new THREE.CapsuleGeometry(0.155, 0.16, 12, 32),
     glass: new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color("#F7EAE4"),
+      color: new THREE.Color("#FDF8F6"), // near-white, so the serum's colour reads true
       roughness: 0.15,
       transmission: 0.7,
       thickness: 1,
@@ -90,8 +90,8 @@ export function createBottleKit(): BottleKit {
       iridescence: 0.15,
       iridescenceIOR: 1.3,
       envMapIntensity: 1.2,
-      attenuationColor: new THREE.Color("#F2C9C0"),
-      attenuationDistance: 2.5,
+      attenuationColor: new THREE.Color("#F8E4DE"),
+      attenuationDistance: 4,
     }),
     collarMat: new THREE.MeshStandardMaterial({
       color: new THREE.Color("#D8A48C"), // rose gold
@@ -113,7 +113,14 @@ export function createBottleKit(): BottleKit {
 /** Opaque serum material. Opaque on purpose: three.js only renders opaque
     objects into the transmission buffer, so this is what shows through. */
 export function createLiquidMaterial(hex: string) {
-  return new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: 0.3 });
+  // A gentle emissive glow in the same colour keeps each shade saturated
+  // after the frosted glass and ACES tone mapping have softened it.
+  return new THREE.MeshStandardMaterial({
+    color: new THREE.Color(hex),
+    emissive: new THREE.Color(hex),
+    emissiveIntensity: 0.35,
+    roughness: 0.3,
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -125,6 +132,7 @@ export function BottleModel({
   causticsRef,
   spinSpeed = 0.12,
   floatIntensity = 0.3,
+  caustics = true,
 }: {
   kit: BottleKit;
   liquid: THREE.Material;
@@ -134,6 +142,8 @@ export function BottleModel({
   causticsRef?: React.RefObject<THREE.Group | null>;
   spinSpeed?: number;
   floatIntensity?: number;
+  /** Off for the finale lineup: their small plinths can't catch the pattern. */
+  caustics?: boolean;
 }) {
   const spin = useRef<THREE.Group>(null);
 
@@ -148,19 +158,32 @@ export function BottleModel({
           {/* Caustics: light focused by the glass, projected onto a plane at
               the bottle's base (the Caustics group's local y = 0). Computed
               once — in the bottle's own space nothing changes afterwards. */}
-          <Caustics
-            ref={causticsRef}
-            position={[0, BOTTLE_BASE_Y, 0]}
-            causticsOnly={false}
-            backside={false}
-            color="#FFE6CC"
-            intensity={0.06}
-            worldRadius={0.35}
-            ior={1.2}
-            resolution={512}
-            lightSource={[5, 8, 4]}
-          >
-            <mesh castShadow geometry={kit.body} material={kit.glass} position={[0, -BOTTLE_BASE_Y, 0]}>
+          {caustics ? (
+            <Caustics
+              ref={causticsRef}
+              position={[0, BOTTLE_BASE_Y, 0]}
+              causticsOnly={false}
+              backside={false}
+              color="#FFE6CC"
+              intensity={0.06}
+              worldRadius={0.35}
+              ior={1.2}
+              resolution={512}
+              lightSource={[5, 8, 4]}
+            >
+              <mesh castShadow geometry={kit.body} material={kit.glass} position={[0, -BOTTLE_BASE_Y, 0]}>
+                {/* The label, projected onto the curved glass */}
+                <Decal
+                  position={[0, 0.02, 0.55]}
+                  rotation={[0, 0, 0]}
+                  scale={[0.78, 0.49, 0.5]}
+                  map={kit.label}
+                  polygonOffsetFactor={-10}
+                />
+              </mesh>
+            </Caustics>
+          ) : (
+            <mesh castShadow geometry={kit.body} material={kit.glass}>
               {/* The label, projected onto the curved glass */}
               <Decal
                 position={[0, 0.02, 0.55]}
@@ -170,7 +193,7 @@ export function BottleModel({
                 polygonOffsetFactor={-10}
               />
             </mesh>
-          </Caustics>
+          )}
 
           <mesh geometry={kit.liquid} material={liquid} />
           <mesh geometry={kit.pipette} material={kit.pipetteMat} position={[0, 0.2, 0]} />

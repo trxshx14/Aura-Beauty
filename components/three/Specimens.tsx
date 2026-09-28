@@ -31,10 +31,12 @@ function dropletGeometry() {
 
 /* Each specimen's resting spot on the orbit: angle (rad), radius, height. */
 const ORBIT = [
-  { angle: 0.3, radius: 1.0, y: 0.95 },
-  { angle: 1.9, radius: 0.95, y: -0.35 },
-  { angle: 3.4, radius: 1.0, y: 0.45 },
-  { angle: 4.9, radius: 0.9, y: -0.8 },
+  // Tight orbit: specimens pass in front of and behind the bottle instead of
+  // drifting over the headline (left) or the ingredient card (right).
+  { angle: 0.3, radius: 0.72, y: 1.0 },
+  { angle: 1.9, radius: 0.7, y: -0.3 },
+  { angle: 3.4, radius: 0.74, y: 0.45 },
+  { angle: 4.9, radius: 0.68, y: -0.75 },
 ];
 
 export default function Specimens({

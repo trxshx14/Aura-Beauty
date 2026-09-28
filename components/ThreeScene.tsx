@@ -95,7 +95,9 @@ const overlayState = {
 /* Lineup for the finale: one bottle per shade, 20 % of the viewport apart,
    so the HTML labels (centred at 20 / 40 / 60 / 80 %) line up underneath. */
 const LINEUP_X = [-0.3, -0.1, 0.1, 0.3];
-const LINEUP_SCALE = 0.72;
+// Sized so bottle tops clear the headline and plinths stand on the floor
+// above the HTML labels (see the finale camera target below).
+const LINEUP_SCALE = 0.64;
 
 /* -------------------------------------------------------------------------- */
 /*  Scene refs                                                                 */
@@ -275,21 +277,23 @@ function Lineup({
   // Spaced for the finale camera distance, so bottles land at 20/40/60/80 %.
   const width = viewWidth(FINALE_DISTANCE, size.width / size.height);
   const liquids = useMemo(() => SHADES.map((s) => createLiquidMaterial(s.hex)), []);
-  const pedestalTop = -0.95;
+  // Plinths stand on the floor (y = −1.45), 0.45 tall.
+  const pedestalHeight = 0.45;
+  const pedestalTop = -1.45 + pedestalHeight;
 
   return (
     <group ref={refs.lineup} visible={false}>
       {SHADES.map((shade, i) => (
         <group key={shade.id} name={`slot-${i}`} position={[LINEUP_X[i] * width, -3.4, 0]}>
-          <mesh castShadow receiveShadow material={mats.terrazzo} position={[0, pedestalTop - 0.25, 0]}>
-            <cylinderGeometry args={[0.5, 0.5, 0.5, 64]} />
+          <mesh castShadow receiveShadow material={mats.terrazzo} position={[0, pedestalTop - pedestalHeight / 2, 0]}>
+            <cylinderGeometry args={[0.5, 0.5, pedestalHeight, 64]} />
           </mesh>
           <group
             position={[0, pedestalTop - BOTTLE_BASE_Y * LINEUP_SCALE, 0]}
             scale={LINEUP_SCALE}
             rotation={[0, -0.3 + i * 0.25, 0]}
           >
-            <BottleModel kit={kit} liquid={liquids[i]} spinSpeed={0.08} floatIntensity={0.15} />
+            <BottleModel kit={kit} liquid={liquids[i]} spinSpeed={0.08} floatIntensity={0.15} caustics={false} />
           </group>
         </group>
       ))}
@@ -588,14 +592,14 @@ function ScrollRig({
         // Camera dollies in and swings ~26° left around the bottle
         .to(
           cameraState,
-          { orbit: -0.45, radius: 5, height: 0.35, tx: ACT1_TARGET[0], ty: ACT1_TARGET[1], tz: ACT1_TARGET[2], duration: 1, ease: "sine.inOut" },
+          { orbit: -0.45, radius: 5.4, height: 0.35, tx: ACT1_TARGET[0], ty: ACT1_TARGET[1], tz: ACT1_TARGET[2], duration: 1, ease: "sine.inOut" },
           0
         )
         // Ingredient specimens drift in around the bottle
         .to(overlayState, { specimens: 1, duration: 0.35 }, 0.55)
         .to(heroPedestal.position, { y: -2.7, duration: 1 }, 0)
         .to(steps.position, { x: `-=${1.4}`, y: "-=1.2", duration: 1 }, 0)
-        .to(sphere.position, { x: -vw * 0.1, y: 0.5, duration: 1 }, 0)
+        .to(sphere.position, { x: vw * 0.32, y: 1.15, z: -2, duration: 1 }, 0)
         .to(ring.position, { x: 0, y: 0.1, duration: 1 }, 0)
         .to(ring.rotation, { z: "+=0.6", duration: 1 }, 0)
         .to(ring.scale, { x: 1.2, y: 1.2, z: 1.2, duration: 1 }, 0)
@@ -636,12 +640,11 @@ function ScrollRig({
         .to(ring.position, { x: EDGE_X, duration: 1 }, 1)
         .to(ring.rotation, { z: "+=0.4", duration: 1 }, 1)
         .to(ring.scale, { x: 0.9, y: 0.9, z: 0.9, duration: 1 }, 1)
-        .to(sphere.position, { x: -vw * 0.02, y: -0.95, duration: 1 }, 1)
+        .to(sphere.position, { x: -vw * 0.02, y: -0.95, z: -1.4, duration: 1 }, 1)
         .fromTo("[data-panel='shades']", { autoAlpha: 0, y: 56 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 1.5)
         .to("[data-progress='2']", { opacity: 0.35, duration: 0.2 }, 1.5)
         .to("[data-progress='3']", { opacity: 1, duration: 0.2 }, 1.5);
 
-      if (caustic) tl.to(caustic, { r: causticOn.r, g: causticOn.g, b: causticOn.b, duration: 0.15 }, 1.85);
       mood(tl, "nude", 1.3);
 
       /* ------- Act 3 · t ∈ [2, 3] — the collection ------- */
@@ -663,7 +666,7 @@ function ScrollRig({
       // Wide shot: the camera pulls back and rises to frame all four bottles
       tl.to(
         cameraState,
-        { orbit: 0, radius: FINALE_DISTANCE, height: 0.35, tx: 0, ty: -0.1, tz: 0, duration: 0.8, ease: "sine.inOut" },
+        { orbit: 0, radius: FINALE_DISTANCE, height: 0.35, tx: 0, ty: -0.45, tz: 0, duration: 0.8, ease: "sine.inOut" },
         2.0
       );
 
@@ -703,8 +706,9 @@ function ScrollRig({
       const to = (color: THREE.Color, target: THREE.Color) =>
         gsap.to(color, { r: target.r, g: target.g, b: target.b, duration: 0.9, ease: "power2.out" });
 
-      to(liquid.color, new THREE.Color(hex).lerp(white, 0.15));
-      to(glass.attenuationColor, new THREE.Color(hex).lerp(white, 0.65));
+      to(liquid.color, new THREE.Color(hex));
+      to(liquid.emissive, new THREE.Color(hex));
+      to(glass.attenuationColor, new THREE.Color(hex).lerp(white, 0.8));
       // Key light warms toward the shade; the rim light takes it fully.
       if (refs.keyLight.current) to(refs.keyLight.current.color, warmWhite.clone().lerp(new THREE.Color(hex), 0.18));
       if (refs.rimLight.current) to(refs.rimLight.current.color, new THREE.Color(hex).lerp(white, 0.1));

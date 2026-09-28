@@ -490,7 +490,13 @@ export default function Page() {
                 <h2
                   key={activeShade.id}
                   className="soft-type animate-fade-up [font-family:var(--font-display)] text-[clamp(3rem,7vw,6.5rem)] font-light italic leading-none tracking-tight"
-                  style={{ color: activeShade.hex, ["--soft" as string]: 100, ["--wonk" as string]: 1 }}
+                  style={{
+                    // The shade, deepened with charcoal so pale shades like
+                    // Rosewater stay readable on the cream background.
+                    color: `color-mix(in srgb, ${activeShade.hex} 62%, #2B2927)`,
+                    ["--soft" as string]: 100,
+                    ["--wonk" as string]: 1,
+                  }}
                 >
                   {activeShade.name}
                 </h2>
