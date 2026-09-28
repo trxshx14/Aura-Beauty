@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
-import { PRICE_PHP, SHADES, formatPHP, type Shade } from "../lib/aura";
+import { INGREDIENTS, PRICE_PHP, SHADES, formatPHP, type Shade } from "../lib/aura";
 import MagneticButton from "../components/ui/MagneticButton";
 import Preloader from "../components/ui/Preloader";
 import Hotspots from "../components/ui/Hotspots";
@@ -18,13 +18,6 @@ const ThreeScene = dynamic(() => import("../components/ThreeScene"), {
 /* -------------------------------------------------------------------------- */
 /*  Content                                                                    */
 /* -------------------------------------------------------------------------- */
-
-const INGREDIENTS = [
-  ["Niacinamide", "barrier + tone"],
-  ["Salicylic Acid", "clears pores"],
-  ["Azelaic Acid", "calms redness"],
-  ["Aloe Vera", "soothes + hydrates"],
-] as const;
 
 const MARQUEE_ITEMS = [
   "Seven ingredients",
@@ -419,21 +412,40 @@ export default function Page() {
               </div>
 
               <div className="max-w-md rounded-2xl bg-[#FBF7F4]/85 p-10 shadow-[0_24px_80px_-32px_rgba(43,41,39,0.18)] ring-1 ring-[#F2C9C0]/70 backdrop-blur-md lg:justify-self-end">
-                <ul className="space-y-4 text-sm">
-                  {INGREDIENTS.map(([name, role]) => (
+                {/* Hovering a row spotlights that ingredient's 3D specimen
+                    orbiting the bottle (DOM → WebGL via "aura:ingredient"). */}
+                <ul
+                  className="space-y-4 text-sm"
+                  onMouseLeave={() =>
+                    window.dispatchEvent(new CustomEvent("aura:ingredient", { detail: null }))
+                  }
+                >
+                  {INGREDIENTS.map((ing, i) => (
                     <li
-                      key={name}
+                      key={ing.name}
                       data-formula-row
+                      data-cursor=""
+                      onMouseEnter={() =>
+                        window.dispatchEvent(new CustomEvent("aura:ingredient", { detail: i }))
+                      }
                       className="group flex items-baseline justify-between transition-all duration-300 hover:pl-2"
                     >
+                      <span
+                        aria-hidden
+                        className="mr-3 inline-block h-2 w-2 shrink-0 translate-y-[-1px] rounded-full ring-1 ring-[#2B2927]/10 transition-transform duration-300 group-hover:scale-150"
+                        style={{ backgroundColor: ing.swatch }}
+                      />
                       <span className="font-medium transition-colors duration-300 group-hover:text-[#C97B5D]">
-                        {name}
+                        {ing.name}
                       </span>
                       <span className="mx-3 flex-1 border-b border-dotted border-[#2B2927]/20" />
-                      <span className="text-[#2B2927]/50">{role}</span>
+                      <span className="text-[#2B2927]/50">{ing.role}</span>
                     </li>
                   ))}
                 </ul>
+                <p className="mt-4 hidden text-[10px] uppercase tracking-[0.25em] text-[#2B2927]/35 [@media(hover:hover)]:block">
+                  Hover an ingredient to find it in 3D
+                </p>
 
                 <dl className="mt-8 grid grid-cols-3 gap-4 border-t border-[#F2C9C0]/60 pt-6 text-center">
                   <div>

@@ -24,6 +24,8 @@ declare global {
     "aura:ready": Event;
     /** WebGL → DOM: live render statistics for the stats HUD. */
     "aura:stats": CustomEvent<RenderStats>;
+    /** DOM → WebGL: an ingredient row is hovered (index) or left (null). */
+    "aura:ingredient": CustomEvent<number | null>;
   }
   interface Window {
     /** Set alongside "aura:ready", in case a listener attaches late. */
@@ -72,6 +74,15 @@ export const SHADES = [
 ] as const;
 
 export type Shade = (typeof SHADES)[number];
+
+/* Ingredients — each has a 3D "specimen" that orbits the bottle in act 2.
+   `swatch` is the specimen's colour, echoed as a dot in the ledger. */
+export const INGREDIENTS = [
+  { name: "Niacinamide", role: "barrier + tone", specimen: "crystal", swatch: "#EFD3CB" },
+  { name: "Salicylic Acid", role: "clears pores", specimen: "droplet", swatch: "#F4C9B8" },
+  { name: "Azelaic Acid", role: "calms redness", specimen: "pearls", swatch: "#E8C9A4" },
+  { name: "Aloe Vera", role: "soothes + hydrates", specimen: "gel", swatch: "#C5D3B2" },
+] as const;
 
 /* -------------------------------------------------------------------------- */
 /*  Hotspots — anchored to the bottle in 3D, rendered in the DOM.              */

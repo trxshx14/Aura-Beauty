@@ -18,6 +18,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { HOTSPOTS, SHADES } from "../lib/aura";
 import { BottleModel, BOTTLE_BASE_Y, createBottleKit, createLiquidMaterial } from "./three/Bottle";
 import { createPlasterMaps, createTerrazzoMaps } from "./three/textures";
+import Specimens from "./three/Specimens";
 
 gsap.registerPlugin(ScrollTrigger);
 ScrollTrigger.config({ ignoreMobileResize: true });
@@ -36,13 +37,49 @@ const PALETTE = {
 } as const;
 
 /**
- * The studio backdrop, in HDR. The ACES tone-mapping pass darkens everything
- * it touches, so a plain #FBF7F4 would come out grey. This is the linear value
- * that tone-maps back to exactly #FBF7F4 — solved numerically offline with
- * three.js's own ACES curve. Used for the backdrop dome AND the fog, so the
- * floor dissolves into the page colour with no horizon line.
+ * Studio moods — one per act. Each has two values:
+ *  - `hdr`: the backdrop/fog colour in linear HDR. The ACES tone-mapping pass
+ *    darkens everything it touches, so each value was solved numerically with
+ *    three.js's own ACES curve to tone-map back to exactly `hex`.
+ *  - `hex`: the visible colour, also used to tint the floor.
+ * The backdrop dome and the fog share the colour, so the floor always
+ * dissolves into the backdrop with no horizon line.
  */
-const BACKDROP_HDR = new THREE.Color(4.678, 2.925, 2.178);
+const MOODS = {
+  vanilla: { hex: "#FBF7F4", hdr: [4.678, 2.925, 2.178] }, // act 0 · hero
+  blush: { hex: "#F7E4DF", hdr: [2.354, 0.996, 0.852] }, // act 1 · formula
+  nude: { hex: "#F4EAE2", hdr: [2.156, 1.295, 0.924] }, // act 2 · shades
+  peach: { hex: "#F8E3CD", hdr: [2.348, 0.962, 0.491] }, // act 3 · collection
+} as const;
+
+const BACKDROP_HDR = new THREE.Color(...MOODS.vanilla.hdr);
+
+/* Camera: the base distance everything is composed for, and the finale's
+   pulled-back distance. */
+const FOV = 35;
+const BASE_DISTANCE = 6.2;
+const FINALE_DISTANCE = 7.4;
+
+/** Width of the view at a given distance — replaces `viewport.width`, which
+    would drift once the camera starts moving. */
+function viewWidth(distance: number, aspect: number) {
+  return 2 * distance * Math.tan(THREE.MathUtils.degToRad(FOV / 2)) * aspect;
+}
+
+/* Camera rig state, tweened by the scroll timeline and read every frame.
+   The camera orbits a target point: `orbit` (radians around Y), `radius`,
+   `height`; plus the target it looks at. */
+const cameraState = {
+  orbit: 0,
+  radius: BASE_DISTANCE,
+  height: 0.2,
+  tx: 0,
+  ty: -0.1,
+  tz: 0,
+};
+
+/* Where the specimens orbit in act 1: the camera's target in that act. */
+const ACT1_TARGET: [number, number, number] = [0, 0.2, 0.5];
 
 /* -------------------------------------------------------------------------- */
 /*  Overlay state — plain values the scroll timeline tweens and per-frame     */
@@ -52,6 +89,7 @@ const BACKDROP_HDR = new THREE.Color(4.678, 2.925, 2.178);
 const overlayState = {
   hotspots: 1, // hotspot pins visibility (0–1)
   dof: 0, // depth-of-field bokeh scale
+  specimens: 0, // ingredient specimens visibility (0–1)
 };
 
 /* Lineup for the finale: one bottle per shade, 20 % of the viewport apart,
@@ -76,6 +114,8 @@ type StageRefs = {
   lineup: React.RefObject<THREE.Group | null>;
   keyLight: React.RefObject<THREE.DirectionalLight | null>;
   rimLight: React.RefObject<THREE.PointLight | null>;
+  backdrop: React.RefObject<THREE.Mesh | null>;
+  floor: React.RefObject<THREE.Mesh | null>;
 };
 
 /** The caustics projection plane's colour uniform (fading it to black = off). */
@@ -141,13 +181,13 @@ function StudioStage({
   return (
     <>
       {/* Backdrop dome: an infinite cyclorama in the page colour. */}
-      <mesh scale={60}>
+      <mesh ref={refs.backdrop} scale={60}>
         <sphereGeometry args={[1, 32, 16]} />
         <meshBasicMaterial color={BACKDROP_HDR} side={THREE.BackSide} fog={false} depthWrite={false} />
       </mesh>
 
       {/* Satin studio floor with soft, blurred reflections. */}
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.45, 0]}>
+      <mesh ref={refs.floor} receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.45, 0]}>
         <planeGeometry args={[80, 80]} />
         <MeshReflectorMaterial
           color={PALETTE.vanilla}
@@ -231,14 +271,16 @@ function Lineup({
   kit: ReturnType<typeof createBottleKit>;
   mats: ReturnType<typeof useStageMaterials>;
 }) {
-  const { viewport } = useThree();
+  const size = useThree((s) => s.size);
+  // Spaced for the finale camera distance, so bottles land at 20/40/60/80 %.
+  const width = viewWidth(FINALE_DISTANCE, size.width / size.height);
   const liquids = useMemo(() => SHADES.map((s) => createLiquidMaterial(s.hex)), []);
   const pedestalTop = -0.95;
 
   return (
     <group ref={refs.lineup} visible={false}>
       {SHADES.map((shade, i) => (
-        <group key={shade.id} name={`slot-${i}`} position={[LINEUP_X[i] * viewport.width, -3.4, 0]}>
+        <group key={shade.id} name={`slot-${i}`} position={[LINEUP_X[i] * width, -3.4, 0]}>
           <mesh castShadow receiveShadow material={mats.terrazzo} position={[0, pedestalTop - 0.25, 0]}>
             <cylinderGeometry args={[0.5, 0.5, 0.5, 64]} />
           </mesh>
@@ -256,11 +298,15 @@ function Lineup({
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Mouse-parallax camera                                                      */
+/*  Camera rig — a scroll-driven orbit (the "film" moves) plus mouse parallax  */
+/*  on top (the "handheld" feel). Position is rebuilt every frame from         */
+/*  cameraState; the parallax offset is applied along the camera's own right  */
+/*  and up axes, so it feels the same at every orbit angle.                    */
 /* -------------------------------------------------------------------------- */
 
-function CameraParallax() {
+function CameraRig() {
   const { camera, pointer } = useThree();
+  const parallax = useRef({ x: 0, y: 0 });
   const enabled = useMemo(
     () =>
       typeof window !== "undefined" &&
@@ -268,13 +314,21 @@ function CameraParallax() {
     []
   );
 
-  useFrame(() => {
-    if (!enabled) return;
-    const targetX = pointer.x * 0.35;
-    const targetY = 0.2 + pointer.y * 0.2;
-    camera.position.x += (targetX - camera.position.x) * 0.05;
-    camera.position.y += (targetY - camera.position.y) * 0.05;
-    camera.lookAt(0, -0.1, 0);
+  useFrame((_, delta) => {
+    const p = parallax.current;
+    if (enabled) {
+      p.x = THREE.MathUtils.damp(p.x, pointer.x * 0.35, 3, delta);
+      p.y = THREE.MathUtils.damp(p.y, pointer.y * 0.2, 3, delta);
+    }
+    const c = cameraState;
+    const sin = Math.sin(c.orbit);
+    const cos = Math.cos(c.orbit);
+    camera.position.set(
+      c.tx + sin * c.radius + cos * p.x, // right vector = (cos, 0, −sin)
+      c.height + p.y,
+      c.tz + cos * c.radius - sin * p.x
+    );
+    camera.lookAt(c.tx, c.ty, c.tz);
   });
 
   return null;
@@ -437,7 +491,9 @@ function ScrollRig({
   liquid: THREE.MeshStandardMaterial;
   glass: THREE.MeshPhysicalMaterial;
 }) {
-  const { viewport } = useThree();
+  const size = useThree((s) => s.size);
+  const scene = useThree((s) => s.scene);
+  const stageWidth = viewWidth(BASE_DISTANCE, size.width / size.height);
 
   useLayoutEffect(() => {
     const bottle = refs.bottle.current;
@@ -449,10 +505,13 @@ function ScrollRig({
     const column = refs.column.current;
     const lineup = refs.lineup.current;
     const caustic = causticColor(refs.caustics.current);
+    const backdropMat = refs.backdrop.current?.material as THREE.MeshBasicMaterial | undefined;
+    const floorMat = refs.floor.current?.material as THREE.MeshStandardMaterial | undefined;
+    const fog = scene.fog as THREE.Fog | null;
     if (!bottle || !heroPedestal || !sidePedestal || !steps || !sphere || !ring || !column || !lineup)
       return;
 
-    const vw = viewport.width;
+    const vw = stageWidth;
     const HERO_X = vw * 0.22;
     const EDGE_X = vw * 0.3;
     const slots = lineup.children.filter((c) => c.name.startsWith("slot-"));
@@ -477,6 +536,30 @@ function ScrollRig({
       caustic?.copy(causticOn);
       overlayState.hotspots = 1;
       overlayState.dof = 0;
+      overlayState.specimens = 0;
+      Object.assign(cameraState, {
+        orbit: 0,
+        radius: BASE_DISTANCE,
+        height: 0.2,
+        tx: 0,
+        ty: -0.1,
+        tz: 0,
+      });
+      backdropMat?.color.setRGB(...MOODS.vanilla.hdr);
+      fog?.color.setRGB(...MOODS.vanilla.hdr);
+      floorMat?.color.set(MOODS.vanilla.hex);
+    };
+
+    /* Studio mood shift: backdrop + fog (HDR) and floor (visible colour)
+       blend to the next act's colour over `duration`, starting at `at`. */
+    const mood = (tl: gsap.core.Timeline, name: keyof typeof MOODS, at: number, duration = 0.6) => {
+      const [r, g, b] = MOODS[name].hdr;
+      if (backdropMat) tl.to(backdropMat.color, { r, g, b, duration, ease: "sine.inOut" }, at);
+      if (fog) tl.to(fog.color, { r, g, b, duration, ease: "sine.inOut" }, at);
+      if (floorMat) {
+        const c = new THREE.Color(MOODS[name].hex);
+        tl.to(floorMat.color, { r: c.r, g: c.g, b: c.b, duration, ease: "sine.inOut" }, at);
+      }
     };
 
     const mm = gsap.matchMedia();
@@ -500,8 +583,16 @@ function ScrollRig({
       /* ------- Act 1 · t ∈ [0, 1] — lift-off and macro close-up ------- */
       tl.to(overlayState, { hotspots: 0, duration: 0.18 }, 0.02)
         .to(bottle.rotation, { y: `+=${Math.PI}`, duration: 1 }, 0)
-        .to(bottle.scale, { x: 1.05, y: 1.05, z: 1.05, duration: 1 }, 0)
-        .to(bottle.position, { x: 0, y: -0.1, z: 0.9, duration: 1 }, 0)
+        .to(bottle.scale, { x: 1, y: 1, z: 1, duration: 1 }, 0)
+        .to(bottle.position, { x: 0, y: -0.1, z: ACT1_TARGET[2], duration: 1 }, 0)
+        // Camera dollies in and swings ~26° left around the bottle
+        .to(
+          cameraState,
+          { orbit: -0.45, radius: 5, height: 0.35, tx: ACT1_TARGET[0], ty: ACT1_TARGET[1], tz: ACT1_TARGET[2], duration: 1, ease: "sine.inOut" },
+          0
+        )
+        // Ingredient specimens drift in around the bottle
+        .to(overlayState, { specimens: 1, duration: 0.35 }, 0.55)
         .to(heroPedestal.position, { y: -2.7, duration: 1 }, 0)
         .to(steps.position, { x: `-=${1.4}`, y: "-=1.2", duration: 1 }, 0)
         .to(sphere.position, { x: -vw * 0.1, y: 0.5, duration: 1 }, 0)
@@ -525,10 +616,18 @@ function ScrollRig({
         .to("[data-progress='2']", { opacity: 1, duration: 0.2 }, 0.5);
 
       if (caustic) tl.to(caustic, { r: 0, g: 0, b: 0, duration: 0.15 }, 0.05);
+      mood(tl, "blush", 0.3);
 
       /* ------- Act 2 · t ∈ [1, 2] — the shade counter ------- */
       tl.to("[data-panel='formula']", { autoAlpha: 0, y: -40, duration: 0.3 }, 1.0)
         .to(overlayState, { dof: 0, duration: 0.3 }, 1.0)
+        .to(overlayState, { specimens: 0, duration: 0.25 }, 1.0)
+        // Camera settles back to the base framing, drifting slightly right
+        .to(
+          cameraState,
+          { orbit: 0.12, radius: BASE_DISTANCE, height: 0.2, tx: 0, ty: -0.1, tz: 0, duration: 1, ease: "sine.inOut" },
+          1
+        )
         .to(bottle.position, { x: EDGE_X, y: -0.15, z: 0.3, duration: 1 }, 1)
         .to(bottle.rotation, { y: `+=${Math.PI * 0.35}`, duration: 1 }, 1)
         .to(bottle.scale, { x: 0.95, y: 0.95, z: 0.95, duration: 1 }, 1)
@@ -543,6 +642,7 @@ function ScrollRig({
         .to("[data-progress='3']", { opacity: 1, duration: 0.2 }, 1.5);
 
       if (caustic) tl.to(caustic, { r: causticOn.r, g: causticOn.g, b: causticOn.b, duration: 0.15 }, 1.85);
+      mood(tl, "nude", 1.3);
 
       /* ------- Act 3 · t ∈ [2, 3] — the collection ------- */
       tl.to("[data-panel='shades']", { autoAlpha: 0, y: -40, duration: 0.25 }, 2.0)
@@ -559,6 +659,13 @@ function ScrollRig({
         .to("[data-progress='4']", { opacity: 1, duration: 0.2 }, 2.5);
 
       if (caustic) tl.to(caustic, { r: 0, g: 0, b: 0, duration: 0.1 }, 2.0);
+      mood(tl, "peach", 2.1);
+      // Wide shot: the camera pulls back and rises to frame all four bottles
+      tl.to(
+        cameraState,
+        { orbit: 0, radius: FINALE_DISTANCE, height: 0.35, tx: 0, ty: -0.1, tz: 0, duration: 0.8, ease: "sine.inOut" },
+        2.0
+      );
 
       slots.forEach((slot, i) => {
         tl.to(slot.position, { y: 0, duration: 0.45, ease: "power3.out" }, 2.2 + i * 0.08);
@@ -585,7 +692,7 @@ function ScrollRig({
     });
 
     return () => mm.revert();
-  }, [viewport.width, refs]);
+  }, [stageWidth, refs]);
 
   /* ---- DOM → WebGL: a selected shade tints the serum AND the studio ---- */
   useEffect(() => {
@@ -634,6 +741,8 @@ export default function ThreeScene() {
   const lineup = useRef<THREE.Group>(null);
   const keyLight = useRef<THREE.DirectionalLight>(null);
   const rimLight = useRef<THREE.PointLight>(null);
+  const backdrop = useRef<THREE.Mesh>(null);
+  const floor = useRef<THREE.Mesh>(null);
 
   // One stable object for the scene's lifetime, so a DPR change never
   // rebuilds the scroll timeline (which depends on `refs`).
@@ -651,6 +760,8 @@ export default function ThreeScene() {
       lineup,
       keyLight,
       rimLight,
+      backdrop,
+      floor,
     }),
     []
   );
@@ -658,7 +769,7 @@ export default function ThreeScene() {
   return (
     <Canvas
       dpr={dpr}
-      camera={{ position: [0, 0.2, 6.2], fov: 35 }}
+      camera={{ position: [0, 0.2, BASE_DISTANCE], fov: FOV }}
       gl={{ antialias: false, powerPreference: "high-performance" }}
       shadows
     >
@@ -707,9 +818,10 @@ export default function ThreeScene() {
       </group>
 
       <Lineup refs={refs} kit={kit} mats={stageMats} />
+      <Specimens state={overlayState} position={ACT1_TARGET} />
 
       <ScrollRig refs={refs} liquid={heroLiquid} glass={kit.glass} />
-      <CameraParallax />
+      <CameraRig />
       <HotspotProjector refs={refs} />
       <ReadySignal />
       <StatsProbe />
