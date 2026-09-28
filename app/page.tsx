@@ -212,7 +212,9 @@ export default function Page() {
       <Preloader onReveal={onReveal} />
 
       {/* LAYER 0 — fixed 3D stage */}
-      <div className="fixed inset-0 z-0 h-screen w-full pointer-events-none">
+      {/* h-lvh (largest viewport height): the canvas doesn't resize when a phone's
+          URL bar slides in and out, so the scene never jumps mid-scroll. */}
+      <div className="pointer-events-none fixed inset-x-0 top-0 z-0 h-lvh w-full">
         <ThreeScene />
       </div>
 
@@ -237,7 +239,7 @@ export default function Page() {
       <Hotspots />
 
       {/* LAYER 3 — fixed chrome */}
-      <header className="fixed inset-x-0 top-0 z-20 flex items-center justify-between px-8 py-6 md:px-16 lg:px-24">
+      <header className="fixed inset-x-0 top-0 z-20 flex items-center justify-between px-6 py-5 md:px-16 md:py-6 lg:px-24">
         <a
           href="#"
           data-cursor=""
@@ -306,7 +308,7 @@ export default function Page() {
       {/* ------------------------------------------------------------------ */}
       <div id="scroll-container" className="relative z-10 w-full">
         {/* ---------------- Section 1 — Hero showcase ---------------- */}
-        <section className="relative flex h-screen w-full items-center overflow-hidden">
+        <section className="relative flex h-svh w-full items-center overflow-hidden">
           <div data-panel="hero" className="relative h-full w-full">
             <span
               aria-hidden
@@ -315,18 +317,18 @@ export default function Page() {
               AURA
             </span>
 
-            <div className="relative mx-auto flex h-full w-full max-w-7xl items-center px-8 md:px-16 lg:px-24">
+            <div className="relative mx-auto flex h-full w-full max-w-7xl items-end px-6 pb-24 md:items-center md:px-16 md:pb-0 lg:px-24">
               <div className="max-w-2xl">
                 <p
                   data-intro-fade
-                  className="mb-8 flex items-center gap-4 text-xs font-medium uppercase tracking-[0.35em] text-[#2B2927]/60"
+                  className="mb-4 flex items-center gap-4 text-xs font-medium uppercase tracking-[0.35em] text-[#2B2927]/60 md:mb-8"
                 >
                   <span className="inline-block h-px w-8 bg-[#C97B5D]" />
                   Aura Beauty — Serum Nº1
                 </p>
                 {/* Each line sits in its own overflow mask so it can rise
                     into view; the padding keeps descenders from clipping. */}
-                <h1 className="[font-family:var(--font-display)] text-[clamp(3.25rem,8vw,8.5rem)] font-light leading-[0.95] tracking-tight">
+                <h1 className="[font-family:var(--font-display)] text-[clamp(2.75rem,8vw,8.5rem)] font-light leading-[0.95] tracking-tight">
                   <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em]">
                     <span data-intro-line className="block">
                       Skin,
@@ -343,7 +345,7 @@ export default function Page() {
                     </span>
                   </span>
                 </h1>
-                <div className="mt-12 flex flex-wrap items-end gap-x-16 gap-y-8">
+                <div className="mt-6 flex flex-wrap items-end gap-x-16 gap-y-4 md:mt-12">
                   <p
                     data-intro-fade
                     className="max-w-xs text-sm leading-relaxed text-[#2B2927]/60"
@@ -353,7 +355,7 @@ export default function Page() {
                   </p>
                   <p
                     data-intro-fade
-                    className="flex items-center gap-3 text-[11px] uppercase tracking-[0.3em] text-[#2B2927]/40"
+                    className="hidden items-center gap-3 text-[11px] uppercase tracking-[0.3em] text-[#2B2927]/40 md:flex"
                   >
                     Scroll to explore
                     <span className="inline-block h-8 w-px animate-pulse bg-[#2B2927]/30" />
@@ -386,19 +388,20 @@ export default function Page() {
         </section>
 
         {/* ------------- Section 2 — Formula / ingredients ------------- */}
-        <section className="relative flex h-screen w-full items-center overflow-hidden">
-          <div className="mx-auto w-full max-w-7xl px-8 md:px-16 lg:px-24">
+        {/* Phones: copy and card stack in the bottom half, under the bottle. */}
+        <section className="relative flex h-svh w-full items-end overflow-hidden pb-8 md:items-center md:pb-0">
+          <div className="mx-auto w-full max-w-7xl px-6 md:px-16 lg:px-24">
             <div
               data-panel="formula"
-              className="grid items-center gap-10 opacity-0 will-change-transform lg:grid-cols-2"
+              className="grid items-center gap-5 opacity-0 will-change-transform md:gap-10 lg:grid-cols-2"
             >
               <div>
-                <p className="mb-4 text-xs font-medium uppercase tracking-[0.35em] text-[#C97B5D]">
+                <p className="mb-3 text-xs font-medium uppercase tracking-[0.35em] text-[#C97B5D] md:mb-4">
                   02 — The Clean Formula
                 </p>
                 {/* Each line rises out of its own mask, on the scroll timeline
                     — the same reveal as the hero headline. */}
-                <h2 className="[font-family:var(--font-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-light leading-[1.05]">
+                <h2 className="[font-family:var(--font-display)] text-[clamp(2rem,5vw,4.5rem)] font-light leading-[1.05]">
                   <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em]">
                     <span data-line="formula" className="block">Seven</span>
                   </span>
@@ -413,18 +416,18 @@ export default function Page() {
                     </span>
                   </span>
                 </h2>
-                <p className="mt-6 max-w-sm text-sm leading-relaxed text-[#2B2927]/60">
+                <p className="mt-6 hidden max-w-sm text-sm leading-relaxed text-[#2B2927]/60 md:block">
                   Niacinamide and two gentle acids, buffered with aloe —
                   suspended in frosted glass that shields every drop from
                   light.
                 </p>
               </div>
 
-              <div className="max-w-md rounded-2xl bg-[#FBF7F4]/85 p-10 shadow-[0_24px_80px_-32px_rgba(43,41,39,0.18)] ring-1 ring-[#F2C9C0]/70 backdrop-blur-md lg:justify-self-end">
+              <div className="max-w-md rounded-2xl bg-[#FBF7F4]/85 p-6 shadow-[0_24px_80px_-32px_rgba(43,41,39,0.18)] ring-1 ring-[#F2C9C0]/70 backdrop-blur-md md:p-10 lg:justify-self-end">
                 {/* Hovering a row spotlights that ingredient's 3D specimen
                     orbiting the bottle (DOM → WebGL via "aura:ingredient"). */}
                 <ul
-                  className="space-y-4 text-sm"
+                  className="space-y-3 text-sm md:space-y-4"
                   onMouseLeave={() =>
                     window.dispatchEvent(new CustomEvent("aura:ingredient", { detail: null }))
                   }
@@ -456,7 +459,7 @@ export default function Page() {
                   Hover an ingredient to find it in 3D
                 </p>
 
-                <dl className="mt-8 grid grid-cols-3 gap-4 border-t border-[#F2C9C0]/60 pt-6 text-center">
+                <dl className="mt-8 hidden grid-cols-3 gap-4 border-t border-[#F2C9C0]/60 pt-6 text-center md:grid">
                   <div>
                     <dt className="text-[10px] uppercase tracking-[0.25em] text-[#2B2927]/40">
                       Vegan
@@ -482,8 +485,8 @@ export default function Page() {
         </section>
 
         {/* --------------- Section 3 — Interactive shades --------------- */}
-        <section className="relative flex h-screen w-full items-center overflow-hidden">
-          <div className="mx-auto w-full max-w-7xl px-8 md:px-16 lg:px-24">
+        <section className="relative flex h-svh w-full items-end overflow-hidden pb-10 md:items-center md:pb-0">
+          <div className="mx-auto w-full max-w-7xl px-6 md:px-16 lg:px-24">
             <div
               data-panel="shades"
               className="max-w-xl opacity-0 will-change-transform"
@@ -526,7 +529,7 @@ export default function Page() {
               </p>
 
               {/* Swatches: swiped strokes of serum rather than flat dots. */}
-              <div className="mt-10 flex flex-wrap items-end gap-x-3 gap-y-4">
+              <div className="mt-6 flex items-end gap-x-1 md:mt-10 md:gap-x-3">
                 {SHADES.map((shade, i) => {
                   const isActive = shade.id === activeShade.id;
                   return (
@@ -537,14 +540,14 @@ export default function Page() {
                       onClick={() => selectShade(shade)}
                       aria-label={`Select shade ${shade.id} ${shade.name}`}
                       aria-pressed={isActive}
-                      className="group flex flex-col items-center gap-2 rounded-xl px-1 pt-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B2927] focus-visible:ring-offset-4 focus-visible:ring-offset-[#FBF7F4]"
+                      className="group flex flex-col items-center gap-2 rounded-xl px-0.5 pt-2 focus:outline-none md:px-1 focus-visible:ring-2 focus-visible:ring-[#2B2927] focus-visible:ring-offset-4 focus-visible:ring-offset-[#FBF7F4]"
                     >
                       <span
                         className={`block transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                           isActive ? "-translate-y-2 scale-110" : "group-hover:-translate-y-1"
                         }`}
                       >
-                        <SwatchStroke hex={shade.hex} index={i} className="h-10 w-24" />
+                        <SwatchStroke hex={shade.hex} index={i} className="h-7 w-16 md:h-10 md:w-24" />
                       </span>
                       <span
                         className={`text-[10px] uppercase tracking-[0.2em] transition-opacity duration-300 ${
@@ -566,7 +569,7 @@ export default function Page() {
               <MagneticButton
                 data-cursor="Add"
                 onClick={(e) => addToBag(e)}
-                className={`mt-12 rounded-full bg-[#2B2927] px-10 py-4 text-xs font-medium uppercase tracking-[0.3em] text-[#FBF7F4] transition-colors duration-300 hover:bg-[#C97B5D] ${focusRing}`}
+                className={`mt-8 w-full rounded-full bg-[#2B2927] px-10 py-4 md:mt-12 md:w-auto text-xs font-medium uppercase tracking-[0.3em] text-[#FBF7F4] transition-colors duration-300 hover:bg-[#C97B5D] ${focusRing}`}
               >
                 Add to bag — {formatPHP(PRICE_PHP)}
               </MagneticButton>
@@ -579,10 +582,10 @@ export default function Page() {
         {/* The four bottles are 3D; this panel only adds type and buttons.
             Columns are centred at 20 / 40 / 60 / 80 % — exactly where the
             scene places the bottles — so each label sits under its bottle. */}
-        <section className="relative h-screen w-full overflow-hidden">
+        <section className="relative h-svh w-full overflow-hidden">
           <div
             data-panel="finale"
-            className="flex h-full flex-col justify-between pb-10 pt-28 opacity-0 will-change-transform"
+            className="flex h-full flex-col justify-between pb-8 pt-24 opacity-0 will-change-transform md:pb-10 md:pt-28"
           >
             <div className="px-8 text-center">
               <p className="mb-3 text-xs font-medium uppercase tracking-[0.35em] text-[#C97B5D]">
@@ -607,11 +610,13 @@ export default function Page() {
             </div>
 
             <div>
-              <ul className="grid grid-cols-2 gap-y-6 px-8 md:grid-cols-4 md:gap-y-0 md:px-[10%]">
+              {/* Four equal columns on phones (bottles at 12.5 / 37.5 / 62.5 / 87.5 %),
+                  20 % columns inset by 10 % on desktop (20 / 40 / 60 / 80 %). */}
+              <ul className="grid grid-cols-4 md:px-[10%]">
                 {SHADES.map((shade) => (
                   <li key={shade.id} className="flex flex-col items-center text-center">
-                    <p className="[font-family:var(--font-display)] text-xl italic">{shade.name}</p>
-                    <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-[#2B2927]/45">
+                    <p className="[font-family:var(--font-display)] text-sm italic md:text-xl">{shade.name}</p>
+                    <p className="mt-1 hidden text-[10px] uppercase tracking-[0.25em] text-[#2B2927]/45 md:block">
                       Shade {shade.id} · {formatPHP(PRICE_PHP)}
                     </p>
                     <button
@@ -619,15 +624,16 @@ export default function Page() {
                       data-cursor="Add"
                       onClick={(e) => addToBag(e, shade)}
                       aria-label={`Add ${shade.name} to bag`}
-                      className={`mt-3 rounded-full border border-[#2B2927]/20 px-5 py-2 text-[10px] font-medium uppercase tracking-[0.25em] transition-colors duration-300 hover:border-[#2B2927] hover:bg-[#2B2927] hover:text-[#FBF7F4] ${focusRing}`}
+                      className={`mt-2 rounded-full border border-[#2B2927]/20 px-3 py-1.5 text-[10px] md:mt-3 md:px-5 md:py-2 font-medium uppercase tracking-[0.25em] transition-colors duration-300 hover:border-[#2B2927] hover:bg-[#2B2927] hover:text-[#FBF7F4] ${focusRing}`}
                     >
-                      Add to bag
+                      <span className="md:hidden">Add</span>
+                      <span className="hidden md:inline">Add to bag</span>
                     </button>
                   </li>
                 ))}
               </ul>
 
-              <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 px-8 text-[10px] uppercase tracking-[0.3em] text-[#2B2927]/35">
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 text-[10px] md:mt-10 uppercase tracking-[0.3em] text-[#2B2927]/35">
                 <p>Aura Beauty © 2026 — Designed &amp; built by Trisha Raye</p>
                 <button
                   type="button"
@@ -636,7 +642,7 @@ export default function Page() {
                   aria-pressed={hudOpen}
                   className={`uppercase tracking-[0.3em] underline-offset-4 hover:text-[#2B2927] hover:underline ${focusRing}`}
                 >
-                  Render stats <kbd className="font-mono normal-case tracking-normal">[D]</kbd>
+                  Render stats <kbd className="hidden font-mono normal-case tracking-normal md:inline">[D]</kbd>
                 </button>
               </div>
             </div>

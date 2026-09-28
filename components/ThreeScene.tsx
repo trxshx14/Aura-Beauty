@@ -78,8 +78,100 @@ const cameraState = {
   tz: 0,
 };
 
-/* Where the specimens orbit in act 1: the camera's target in that act. */
+/* Where the specimens orbit in act 1: around the bottle's close-up spot. */
 const ACT1_TARGET: [number, number, number] = [0, 0.2, 0.5];
+
+/* -------------------------------------------------------------------------- */
+/*  Stage layout — every position and camera move, per screen shape.          */
+/*                                                                             */
+/*  Desktop (landscape): copy on the left, product on the right.               */
+/*  Phone (< 768 px, portrait): product centred in the TOP half, copy stacked  */
+/*  in the bottom half. The camera sits further back and looks lower, so the   */
+/*  bottle keeps a sensible size on a narrow screen.                           */
+/* -------------------------------------------------------------------------- */
+
+type Vec3 = [number, number, number];
+type CameraPose = typeof cameraState;
+
+function stageLayout(width: number, height: number) {
+  const aspect = width / height;
+  const mobile = width < 768;
+  const base = mobile ? 10 : BASE_DISTANCE;
+  const vw = viewWidth(base, aspect); // stage width at the base distance
+  const finaleWidth = viewWidth(FINALE_DISTANCE, aspect);
+  const cam = (pose: Partial<CameraPose>): CameraPose => ({
+    orbit: 0,
+    radius: base,
+    height: 0.2,
+    tx: 0,
+    ty: -0.1,
+    tz: 0,
+    ...pose,
+  });
+
+  if (mobile) {
+    return {
+      mobile,
+      vw,
+      heroX: 0,
+      edgeX: 0,
+      steps: [vw * 0.5, -1.3, -4.2] as Vec3,
+      column: [-vw * 0.7, 1.4, -8] as Vec3,
+      sphere: {
+        hero: [vw * 0.33, -1.07, -0.6] as Vec3, // resting on the floor, right of the plinth
+        act1: [vw * 0.36, 1.9, -2] as Vec3,
+        act2: [vw * 0.36, -1.07, -0.8] as Vec3,
+        finale: [vw * 0.7, -1.05, -2.5] as Vec3,
+      },
+      camera: {
+        // Looking lower puts the product in the top half of the screen.
+        hero: cam({ ty: -1.37 }),
+        act1: cam({ orbit: -0.35, radius: 11, height: 0.3, ty: -1.76, tz: 0.5 }),
+        act2: cam({ orbit: 0.12, ty: -1.37 }),
+        finale: cam({ radius: FINALE_DISTANCE, ty: -0.85 }),
+      },
+      ring: { finaleY: -0.9, finaleScale: 1.2 },
+      lineup: {
+        // Four equal columns — matches the 4-column label grid on phones.
+        xs: [-0.375, -0.125, 0.125, 0.375].map((x) => x * finaleWidth),
+        scale: 0.3,
+        pedestalRadius: 0.24,
+        pedestalHeight: 0.3,
+      },
+    };
+  }
+
+  return {
+    mobile,
+    vw,
+    heroX: vw * 0.22,
+    edgeX: vw * 0.3,
+    steps: [vw * 0.42, -1.3, -4.2] as Vec3,
+    column: [-vw * 0.55, 1.4, -8] as Vec3,
+    sphere: {
+      hero: [vw * 0.05, -0.7, -1.4] as Vec3,
+      act1: [vw * 0.32, 1.15, -2] as Vec3,
+      act2: [-vw * 0.02, -0.95, -1.4] as Vec3,
+      finale: [vw * 0.48, -1.05, -2.5] as Vec3,
+    },
+    camera: {
+      hero: cam({}),
+      act1: cam({ orbit: -0.45, radius: 5.4, height: 0.35, tx: ACT1_TARGET[0], ty: ACT1_TARGET[1], tz: ACT1_TARGET[2] }),
+      act2: cam({ orbit: 0.12 }),
+      finale: cam({ radius: FINALE_DISTANCE, height: 0.35, ty: -0.45 }),
+    },
+    ring: { finaleY: 0.35, finaleScale: 2.3 },
+    lineup: {
+      // 20 / 40 / 60 / 80 % — matches the label columns on desktop.
+      xs: LINEUP_X.map((x) => x * finaleWidth),
+      scale: LINEUP_SCALE,
+      pedestalRadius: 0.5,
+      pedestalHeight: 0.45,
+    },
+  };
+}
+
+type StageLayout = ReturnType<typeof stageLayout>;
 
 /* -------------------------------------------------------------------------- */
 /*  Overlay state — plain values the scroll timeline tweens and per-frame     */
@@ -176,9 +268,12 @@ function useStageMaterials() {
 function StudioStage({
   refs,
   mats,
+  lite,
 }: {
   refs: StageRefs;
   mats: ReturnType<typeof useStageMaterials>;
+  /** Phones / touch devices: cheaper reflections and fewer particles. */
+  lite: boolean;
 }) {
   return (
     <>
@@ -196,7 +291,7 @@ function StudioStage({
           roughness={0.85}
           metalness={0}
           mirror={0}
-          resolution={512}
+          resolution={lite ? 256 : 512}
           blur={[300, 80]}
           mixBlur={1}
           mixStrength={1.6}
@@ -247,7 +342,7 @@ function StudioStage({
       </mesh>
 
       <Sparkles
-        count={70}
+        count={lite ? 35 : 70}
         scale={[14, 6, 8]}
         position={[0, 0.6, -1]}
         size={2.5}
@@ -274,23 +369,22 @@ function Lineup({
   mats: ReturnType<typeof useStageMaterials>;
 }) {
   const size = useThree((s) => s.size);
-  // Spaced for the finale camera distance, so bottles land at 20/40/60/80 %.
-  const width = viewWidth(FINALE_DISTANCE, size.width / size.height);
+  // Spaced for the finale camera, so each bottle lands above its HTML label.
+  const { xs, scale, pedestalRadius, pedestalHeight } = stageLayout(size.width, size.height).lineup;
   const liquids = useMemo(() => SHADES.map((s) => createLiquidMaterial(s.hex)), []);
-  // Plinths stand on the floor (y = −1.45), 0.45 tall.
-  const pedestalHeight = 0.45;
+  // Plinths stand on the floor (y = −1.45).
   const pedestalTop = -1.45 + pedestalHeight;
 
   return (
     <group ref={refs.lineup} visible={false}>
       {SHADES.map((shade, i) => (
-        <group key={shade.id} name={`slot-${i}`} position={[LINEUP_X[i] * width, -3.4, 0]}>
+        <group key={shade.id} name={`slot-${i}`} position={[xs[i], -3.4, 0]}>
           <mesh castShadow receiveShadow material={mats.terrazzo} position={[0, pedestalTop - pedestalHeight / 2, 0]}>
-            <cylinderGeometry args={[0.5, 0.5, pedestalHeight, 64]} />
+            <cylinderGeometry args={[pedestalRadius, pedestalRadius, pedestalHeight, 64]} />
           </mesh>
           <group
-            position={[0, pedestalTop - BOTTLE_BASE_Y * LINEUP_SCALE, 0]}
-            scale={LINEUP_SCALE}
+            position={[0, pedestalTop - BOTTLE_BASE_Y * scale, 0]}
+            scale={scale}
             rotation={[0, -0.3 + i * 0.25, 0]}
           >
             <BottleModel kit={kit} liquid={liquids[i]} spinSpeed={0.08} floatIntensity={0.15} caustics={false} />
@@ -344,7 +438,7 @@ function CameraRig() {
 /*  tone mapping is switched off by EffectComposer).                           */
 /* -------------------------------------------------------------------------- */
 
-function Effects({ refs }: { refs: StageRefs }) {
+function Effects({ refs, lite }: { refs: StageRefs; lite: boolean }) {
   const dof = useRef<DepthOfFieldEffect>(null);
   const focus = useMemo(() => new THREE.Vector3(), []);
 
@@ -358,7 +452,7 @@ function Effects({ refs }: { refs: StageRefs }) {
   });
 
   return (
-    <EffectComposer multisampling={4}>
+    <EffectComposer multisampling={lite ? 0 : 4}>
       <DepthOfField ref={dof} target={[0, 0, 0]} worldFocusRange={1.6} bokehScale={0} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
     </EffectComposer>
@@ -497,9 +591,13 @@ function ScrollRig({
 }) {
   const size = useThree((s) => s.size);
   const scene = useThree((s) => s.scene);
-  const stageWidth = viewWidth(BASE_DISTANCE, size.width / size.height);
+  // Rebuild the timeline only when the layout actually changes. Rounding
+  // stops tiny height changes (mobile URL bar) from rebuilding mid-scroll.
+  const layoutKey = `${size.width}x${Math.round(size.height / 40) * 40}`;
 
   useLayoutEffect(() => {
+    const [w, h] = layoutKey.split("x").map(Number);
+    const L: StageLayout = stageLayout(w, h);
     const bottle = refs.bottle.current;
     const heroPedestal = refs.heroPedestal.current;
     const sidePedestal = refs.sidePedestal.current;
@@ -515,9 +613,9 @@ function ScrollRig({
     if (!bottle || !heroPedestal || !sidePedestal || !steps || !sphere || !ring || !column || !lineup)
       return;
 
-    const vw = stageWidth;
-    const HERO_X = vw * 0.22;
-    const EDGE_X = vw * 0.3;
+    const vw = L.vw;
+    const HERO_X = L.heroX;
+    const EDGE_X = L.edgeX;
     const slots = lineup.children.filter((c) => c.name.startsWith("slot-"));
     const causticOn = new THREE.Color("#FFE6CC");
 
@@ -529,26 +627,19 @@ function ScrollRig({
 
       heroPedestal.position.set(HERO_X, -1.2, 0);
       sidePedestal.position.set(EDGE_X, -3.4, 0.2);
-      steps.position.set(vw * 0.42, -1.3, -4.2);
-      sphere.position.set(vw * 0.05, -0.7, -1.4);
+      steps.position.set(...L.steps);
+      sphere.position.set(...L.sphere.hero);
       ring.position.set(HERO_X, 0.2, -2.1);
       ring.rotation.set(0, 0, 0.2);
       ring.scale.setScalar(1);
-      column.position.set(-vw * 0.55, 1.4, -8);
+      column.position.set(...L.column);
       lineup.visible = false;
       slots.forEach((s) => (s.position.y = -3.4));
       caustic?.copy(causticOn);
       overlayState.hotspots = 1;
       overlayState.dof = 0;
       overlayState.specimens = 0;
-      Object.assign(cameraState, {
-        orbit: 0,
-        radius: BASE_DISTANCE,
-        height: 0.2,
-        tx: 0,
-        ty: -0.1,
-        tz: 0,
-      });
+      Object.assign(cameraState, L.camera.hero);
       backdropMat?.color.setRGB(...MOODS.vanilla.hdr);
       fog?.color.setRGB(...MOODS.vanilla.hdr);
       floorMat?.color.set(MOODS.vanilla.hex);
@@ -590,16 +681,12 @@ function ScrollRig({
         .to(bottle.scale, { x: 1, y: 1, z: 1, duration: 1 }, 0)
         .to(bottle.position, { x: 0, y: -0.1, z: ACT1_TARGET[2], duration: 1 }, 0)
         // Camera dollies in and swings ~26° left around the bottle
-        .to(
-          cameraState,
-          { orbit: -0.45, radius: 5.4, height: 0.35, tx: ACT1_TARGET[0], ty: ACT1_TARGET[1], tz: ACT1_TARGET[2], duration: 1, ease: "sine.inOut" },
-          0
-        )
+        .to(cameraState, { ...L.camera.act1, duration: 1, ease: "sine.inOut" }, 0)
         // Ingredient specimens drift in around the bottle
         .to(overlayState, { specimens: 1, duration: 0.35 }, 0.55)
         .to(heroPedestal.position, { y: -2.7, duration: 1 }, 0)
         .to(steps.position, { x: `-=${1.4}`, y: "-=1.2", duration: 1 }, 0)
-        .to(sphere.position, { x: vw * 0.32, y: 1.15, z: -2, duration: 1 }, 0)
+        .to(sphere.position, { x: L.sphere.act1[0], y: L.sphere.act1[1], z: L.sphere.act1[2], duration: 1 }, 0)
         .to(ring.position, { x: 0, y: 0.1, duration: 1 }, 0)
         .to(ring.rotation, { z: "+=0.6", duration: 1 }, 0)
         .to(ring.scale, { x: 1.2, y: 1.2, z: 1.2, duration: 1 }, 0)
@@ -634,11 +721,7 @@ function ScrollRig({
         .to(overlayState, { dof: 0, duration: 0.3 }, 1.0)
         .to(overlayState, { specimens: 0, duration: 0.25 }, 1.0)
         // Camera settles back to the base framing, drifting slightly right
-        .to(
-          cameraState,
-          { orbit: 0.12, radius: BASE_DISTANCE, height: 0.2, tx: 0, ty: -0.1, tz: 0, duration: 1, ease: "sine.inOut" },
-          1
-        )
+        .to(cameraState, { ...L.camera.act2, duration: 1, ease: "sine.inOut" }, 1)
         .to(bottle.position, { x: EDGE_X, y: -0.15, z: 0.3, duration: 1 }, 1)
         .to(bottle.rotation, { y: `+=${Math.PI * 0.35}`, duration: 1 }, 1)
         .to(bottle.scale, { x: 0.95, y: 0.95, z: 0.95, duration: 1 }, 1)
@@ -647,7 +730,7 @@ function ScrollRig({
         .to(ring.position, { x: EDGE_X, duration: 1 }, 1)
         .to(ring.rotation, { z: "+=0.4", duration: 1 }, 1)
         .to(ring.scale, { x: 0.9, y: 0.9, z: 0.9, duration: 1 }, 1)
-        .to(sphere.position, { x: -vw * 0.02, y: -0.95, z: -1.4, duration: 1 }, 1)
+        .to(sphere.position, { x: L.sphere.act2[0], y: L.sphere.act2[1], z: L.sphere.act2[2], duration: 1 }, 1)
         .fromTo("[data-panel='shades']", { autoAlpha: 0, y: 56 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 1.5)
         .fromTo(
           "[data-line='shades']",
@@ -665,10 +748,10 @@ function ScrollRig({
         .to(bottle.position, { y: "-=3.3", duration: 0.5, ease: "power2.in" }, 2.0)
         .to(sidePedestal.position, { y: "-=3.3", duration: 0.5, ease: "power2.in" }, 2.0)
         .set(bottle, { visible: false }, 2.5)
-        .to(ring.position, { x: 0, y: 0.35, z: -3.2, duration: 0.8 }, 2.0)
-        .to(ring.scale, { x: 2.3, y: 2.3, z: 2.3, duration: 0.8 }, 2.0)
+        .to(ring.position, { x: 0, y: L.ring.finaleY, z: -3.2, duration: 0.8 }, 2.0)
+        .to(ring.scale, { x: L.ring.finaleScale, y: L.ring.finaleScale, z: L.ring.finaleScale, duration: 0.8 }, 2.0)
         .to(ring.rotation, { z: "+=0.5", duration: 0.8 }, 2.0)
-        .to(sphere.position, { x: vw * 0.48, y: -1.05, z: -2.5, duration: 0.8 }, 2.0)
+        .to(sphere.position, { x: L.sphere.finale[0], y: L.sphere.finale[1], z: L.sphere.finale[2], duration: 0.8 }, 2.0)
         .set(lineup, { visible: true }, 2.05)
         .fromTo("[data-panel='finale']", { autoAlpha: 0, y: 40 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 2.55)
         .fromTo(
@@ -683,11 +766,7 @@ function ScrollRig({
       if (caustic) tl.to(caustic, { r: 0, g: 0, b: 0, duration: 0.1 }, 2.0);
       mood(tl, "peach", 2.1);
       // Wide shot: the camera pulls back and rises to frame all four bottles
-      tl.to(
-        cameraState,
-        { orbit: 0, radius: FINALE_DISTANCE, height: 0.35, tx: 0, ty: -0.45, tz: 0, duration: 0.8, ease: "sine.inOut" },
-        2.0
-      );
+      tl.to(cameraState, { ...L.camera.finale, duration: 0.8, ease: "sine.inOut" }, 2.0);
 
       slots.forEach((slot, i) => {
         tl.to(slot.position, { y: 0, duration: 0.45, ease: "power3.out" }, 2.2 + i * 0.08);
@@ -714,7 +793,7 @@ function ScrollRig({
     });
 
     return () => mm.revert();
-  }, [stageWidth, refs]);
+  }, [layoutKey, refs]);
 
   /* ---- DOM → WebGL: a selected shade tints the serum AND the studio ---- */
   useEffect(() => {
@@ -748,8 +827,16 @@ export default function ThreeScene() {
   const heroLiquid = useMemo(() => createLiquidMaterial("#EFC0A6"), []);
   const stageMats = useStageMaterials();
 
+  // Phones and touch devices get a lighter render budget. Decided once at
+  // mount: toggling it later would recompile every shader.
+  const [lite] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px), (pointer: coarse)").matches
+  );
+
   const [dpr, setDpr] = useState(() =>
-    typeof window === "undefined" ? 1 : Math.min(1.5, window.devicePixelRatio)
+    typeof window === "undefined" ? 1 : Math.min(lite ? 1.25 : 1.5, window.devicePixelRatio)
   );
 
   const bottle = useRef<THREE.Group>(null);
@@ -804,7 +891,7 @@ export default function ThreeScene() {
       />
 
       <fog attach="fog" args={[BACKDROP_HDR, 7, 15]} />
-      <SoftShadows size={24} samples={12} focus={0.6} />
+      <SoftShadows size={24} samples={lite ? 8 : 12} focus={0.6} />
 
       <ambientLight intensity={0.55} color={PALETTE.vanilla} />
       <directionalLight
@@ -813,7 +900,7 @@ export default function ThreeScene() {
         position={[5, 8, 4]}
         intensity={1.7}
         color="#FFF3EA"
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={lite ? [1024, 1024] : [2048, 2048]}
         shadow-bias={-0.0002}
         shadow-camera-left={-10}
         shadow-camera-right={10}
@@ -832,7 +919,7 @@ export default function ThreeScene() {
         <Lightformer intensity={1} color={PALETTE.pink} position={[0, -2, 5]} scale={[8, 3, 1]} />
       </Environment>
 
-      <StudioStage refs={refs} mats={stageMats} />
+      <StudioStage refs={refs} mats={stageMats} lite={lite} />
 
       {/* Hero bottle: GSAP drives the outer group; BottleModel handles float,
           spin, caustics and the label inside it. */}
@@ -848,7 +935,7 @@ export default function ThreeScene() {
       <HotspotProjector refs={refs} />
       <ReadySignal />
       <StatsProbe />
-      <Effects refs={refs} />
+      <Effects refs={refs} lite={lite} />
     </Canvas>
   );
 }
