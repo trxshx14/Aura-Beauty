@@ -24,6 +24,19 @@ canvas {
   transform: translateZ(0);
 }
 
+/* Selected shade — updated by the shade picker; tints the page's shade wash. */
+:root {
+  --shade: #e8c4bc;
+}
+
+/* Fraunces' variable axes: SOFT (0–100) rounds the letterforms, WONK (0/1)
+   swaps in its leaning alternates. GSAP animates --soft / --wonk directly. */
+.soft-type {
+  font-variation-settings:
+    "SOFT" var(--soft, 0),
+    "WONK" var(--wonk, 0);
+}
+
 /* Brand-colored text selection */
 ::selection {
   background: #f2c9c0;

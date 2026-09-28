@@ -39,6 +39,7 @@ const SECTIONS = [
   { n: "01", label: "Vessel" },
   { n: "02", label: "Formula" },
   { n: "03", label: "Shades" },
+  { n: "04", label: "Collection" },
 ] as const;
 
 /* Subtle film grain (inline SVG) — printed, editorial texture. */
@@ -106,7 +107,10 @@ export default function Page() {
   /* ---- Shade selection → WebGL ----------------------------------------- */
   const selectShade = (shade: Shade) => {
     setActiveShade(shade);
+    // One event tints the serum, the rim light and the key light in 3D…
     window.dispatchEvent(new CustomEvent("aura:shade", { detail: shade.hex }));
+    // …and one CSS variable tints the page's atmosphere wash to match.
+    document.documentElement.style.setProperty("--shade", shade.hex);
   };
 
   /* ---- Intro: runs as the preloader curtain lifts ---------------------- */
@@ -127,6 +131,12 @@ export default function Page() {
       stagger: 0.08,
       delay: 0.6,
     });
+    // "light." relaxes into Fraunces' soft, wonky cut as the page settles.
+    gsap.fromTo(
+      "[data-soft-intro]",
+      { "--soft": 0, "--wonk": 0 },
+      { "--soft": 100, "--wonk": 1, duration: 2.2, ease: "power2.inOut", delay: 0.9 }
+    );
     gsap.from("[data-hotspot-pin]", {
       autoAlpha: 0,
       x: -10,
@@ -138,8 +148,7 @@ export default function Page() {
   }, []);
 
   /* ---- Bag ------------------------------------------------------------- */
-  const addToBag = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const shade = activeShade;
+  const addToBag = (e: React.MouseEvent<HTMLButtonElement>, shade: Shade = activeShade) => {
     const commit = () => {
       setLines((prev) => {
         const existing = prev.find((l) => l.shadeId === shade.id);
@@ -218,6 +227,8 @@ export default function Page() {
         <div className="absolute right-[-12%] top-[-18%] h-[75vh] w-[75vh] rounded-full bg-[#E8A852]/[0.13] blur-[130px]" />
         <div className="absolute bottom-[-22%] left-[-12%] h-[85vh] w-[85vh] rounded-full bg-[#F2C9C0]/[0.35] blur-[150px]" />
         <div className="absolute left-1/4 top-1/3 h-[45vh] w-[45vh] rounded-full bg-[#C97B5D]/[0.07] blur-[110px]" />
+        {/* Shade wash: follows the selected shade via the --shade variable */}
+        <div className="absolute right-[-8%] top-[20%] h-[70vh] w-[60vh] rounded-full bg-[var(--shade)] opacity-25 blur-[140px] transition-colors duration-1000" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_55%,rgba(201,123,93,0.09)_100%)]" />
       </div>
 
@@ -333,7 +344,7 @@ export default function Page() {
                     </span>
                   </span>
                   <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em] pr-[0.2em]">
-                    <span data-intro-line className="block italic text-[#C97B5D]">
+                    <span data-intro-line data-soft-intro className="soft-type block italic text-[#C97B5D]">
                       light.
                     </span>
                   </span>
@@ -396,7 +407,9 @@ export default function Page() {
                   <br />
                   ingredients.
                   <br />
-                  <span className="italic text-[#C97B5D]">Zero noise.</span>
+                  <span data-soft-scroll className="soft-type italic text-[#C97B5D]">
+                    Zero noise.
+                  </span>
                 </h2>
                 <p className="mt-6 max-w-sm text-sm leading-relaxed text-[#2B2927]/60">
                   Niacinamide and two gentle acids, buffered with aloe —
@@ -464,8 +477,8 @@ export default function Page() {
                 </p>
                 <h2
                   key={activeShade.id}
-                  className="animate-fade-up [font-family:var(--font-display)] text-[clamp(3rem,7vw,6.5rem)] font-light italic leading-none tracking-tight"
-                  style={{ color: activeShade.hex }}
+                  className="soft-type animate-fade-up [font-family:var(--font-display)] text-[clamp(3rem,7vw,6.5rem)] font-light italic leading-none tracking-tight"
+                  style={{ color: activeShade.hex, ["--soft" as string]: 100, ["--wonk" as string]: 1 }}
                 >
                   {activeShade.name}
                 </h2>
@@ -510,13 +523,62 @@ export default function Page() {
 
               <MagneticButton
                 data-cursor="Add"
-                onClick={addToBag}
+                onClick={(e) => addToBag(e)}
                 className={`mt-12 rounded-full bg-[#2B2927] px-10 py-4 text-xs font-medium uppercase tracking-[0.3em] text-[#FBF7F4] transition-colors duration-300 hover:bg-[#C97B5D] ${focusRing}`}
               >
                 Add to bag — {formatPHP(PRICE_PHP)}
               </MagneticButton>
 
-              <div className="mt-14 flex flex-wrap items-center gap-x-6 gap-y-2 text-[10px] uppercase tracking-[0.3em] text-[#2B2927]/35">
+            </div>
+          </div>
+        </section>
+
+        {/* ------------- Section 4 — The collection (finale) ------------- */}
+        {/* The four bottles are 3D; this panel only adds type and buttons.
+            Columns are centred at 20 / 40 / 60 / 80 % — exactly where the
+            scene places the bottles — so each label sits under its bottle. */}
+        <section className="relative h-screen w-full overflow-hidden">
+          <div
+            data-panel="finale"
+            className="flex h-full flex-col justify-between pb-10 pt-28 opacity-0 will-change-transform"
+          >
+            <div className="px-8 text-center">
+              <p className="mb-3 text-xs font-medium uppercase tracking-[0.35em] text-[#C97B5D]">
+                04 — The Collection
+              </p>
+              <h2 className="[font-family:var(--font-display)] text-[clamp(2rem,4vw,3.75rem)] font-light leading-tight tracking-tight">
+                Four shades.{" "}
+                <span
+                  className="soft-type italic text-[#C97B5D]"
+                  style={{ ["--soft" as string]: 100, ["--wonk" as string]: 1 }}
+                >
+                  One ritual.
+                </span>
+              </h2>
+            </div>
+
+            <div>
+              <ul className="grid grid-cols-2 gap-y-6 px-8 md:grid-cols-4 md:gap-y-0 md:px-[10%]">
+                {SHADES.map((shade) => (
+                  <li key={shade.id} className="flex flex-col items-center text-center">
+                    <p className="[font-family:var(--font-display)] text-xl italic">{shade.name}</p>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.25em] text-[#2B2927]/45">
+                      Shade {shade.id} · {formatPHP(PRICE_PHP)}
+                    </p>
+                    <button
+                      type="button"
+                      data-cursor="Add"
+                      onClick={(e) => addToBag(e, shade)}
+                      aria-label={`Add ${shade.name} to bag`}
+                      className={`mt-3 rounded-full border border-[#2B2927]/20 px-5 py-2 text-[10px] font-medium uppercase tracking-[0.25em] transition-colors duration-300 hover:border-[#2B2927] hover:bg-[#2B2927] hover:text-[#FBF7F4] ${focusRing}`}
+                    >
+                      Add to bag
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 px-8 text-[10px] uppercase tracking-[0.3em] text-[#2B2927]/35">
                 <p>Aura Beauty © 2026 — Designed &amp; built by Trisha Raye</p>
                 <button
                   type="button"

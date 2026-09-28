@@ -1,0 +1,184 @@
+"use client";
+
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { Caustics, Decal, Float } from "@react-three/drei";
+import * as THREE from "three";
+import { createLabelTexture } from "./textures";
+
+/* -------------------------------------------------------------------------- */
+/*  The dropper bottle, modelled in code.                                      */
+/*                                                                             */
+/*  The glass is a lathe (a 2D profile spun around the Y axis): flat base,     */
+/*  straight walls, a curved shoulder and a short neck. On top: a rose-gold    */
+/*  collar and a matte rubber bulb, with a dropper tube running down inside.   */
+/*  Units: radius 0.55, base at y = −0.8, top of the bulb at y ≈ 1.58.         */
+/* -------------------------------------------------------------------------- */
+
+export const BOTTLE_BASE_Y = -0.8;
+
+/** Quadratic Bézier sampled into lathe points — gives the shoulder its curve. */
+function curve(a: THREE.Vector2, control: THREE.Vector2, b: THREE.Vector2, steps: number) {
+  const pts: THREE.Vector2[] = [];
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const x = (1 - t) ** 2 * a.x + 2 * (1 - t) * t * control.x + t ** 2 * b.x;
+    const y = (1 - t) ** 2 * a.y + 2 * (1 - t) * t * control.y + t ** 2 * b.y;
+    pts.push(new THREE.Vector2(x, y));
+  }
+  return pts;
+}
+
+export type BottleKit = {
+  body: THREE.LatheGeometry;
+  liquid: THREE.LatheGeometry;
+  pipette: THREE.CylinderGeometry;
+  collar: THREE.CylinderGeometry;
+  lip: THREE.TorusGeometry;
+  bulb: THREE.CapsuleGeometry;
+  glass: THREE.MeshPhysicalMaterial;
+  collarMat: THREE.MeshStandardMaterial;
+  bulbMat: THREE.MeshStandardMaterial;
+  pipetteMat: THREE.MeshStandardMaterial;
+  label: THREE.CanvasTexture;
+};
+
+/** Geometry and materials shared by every bottle in the scene. */
+export function createBottleKit(): BottleKit {
+  const V = (x: number, y: number) => new THREE.Vector2(x, y);
+
+  const body = new THREE.LatheGeometry(
+    [
+      V(0, -0.8),
+      V(0.5, -0.8),
+      ...curve(V(0.5, -0.8), V(0.55, -0.8), V(0.55, -0.74), 4), // rounded foot
+      V(0.55, 0.45),
+      ...curve(V(0.55, 0.45), V(0.55, 0.9), V(0.22, 0.96), 14), // shoulder
+      V(0.2, 0.98),
+      V(0.2, 1.06),
+      V(0, 1.06),
+    ],
+    96
+  );
+
+  const liquid = new THREE.LatheGeometry(
+    [
+      V(0, -0.74),
+      V(0.46, -0.74),
+      ...curve(V(0.46, -0.74), V(0.5, -0.74), V(0.5, -0.69), 3),
+      V(0.5, 0.28),
+      V(0, 0.28),
+    ],
+    64
+  );
+
+  return {
+    body,
+    liquid,
+    pipette: new THREE.CylinderGeometry(0.045, 0.03, 1.7, 16),
+    collar: new THREE.CylinderGeometry(0.25, 0.25, 0.2, 64),
+    lip: new THREE.TorusGeometry(0.25, 0.018, 12, 64),
+    bulb: new THREE.CapsuleGeometry(0.155, 0.16, 12, 32),
+    glass: new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color("#F7EAE4"),
+      roughness: 0.15,
+      transmission: 0.7,
+      thickness: 1,
+      ior: 1.4,
+      clearcoat: 0.7,
+      clearcoatRoughness: 0.3,
+      iridescence: 0.15,
+      iridescenceIOR: 1.3,
+      envMapIntensity: 1.2,
+      attenuationColor: new THREE.Color("#F2C9C0"),
+      attenuationDistance: 2.5,
+    }),
+    collarMat: new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#D8A48C"), // rose gold
+      metalness: 0.9,
+      roughness: 0.28,
+    }),
+    bulbMat: new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#C97B5D"), // terracotta rubber
+      roughness: 0.75,
+    }),
+    pipetteMat: new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#FFFFFF"),
+      roughness: 0.2,
+    }),
+    label: createLabelTexture(),
+  };
+}
+
+/** Opaque serum material. Opaque on purpose: three.js only renders opaque
+    objects into the transmission buffer, so this is what shows through. */
+export function createLiquidMaterial(hex: string) {
+  return new THREE.MeshStandardMaterial({ color: new THREE.Color(hex), roughness: 0.3 });
+}
+
+/* -------------------------------------------------------------------------- */
+
+export function BottleModel({
+  kit,
+  liquid,
+  anchorRef,
+  causticsRef,
+  spinSpeed = 0.12,
+  floatIntensity = 0.3,
+}: {
+  kit: BottleKit;
+  liquid: THREE.Material;
+  /** Group that follows the bottle AND its idle float (hotspots, DoF focus). */
+  anchorRef?: React.RefObject<THREE.Group | null>;
+  /** Caustics group — its projection plane is the one child mesh. */
+  causticsRef?: React.RefObject<THREE.Group | null>;
+  spinSpeed?: number;
+  floatIntensity?: number;
+}) {
+  const spin = useRef<THREE.Group>(null);
+
+  useFrame((_, delta) => {
+    if (spin.current) spin.current.rotation.y += delta * spinSpeed;
+  });
+
+  return (
+    <Float speed={1.3} rotationIntensity={0.08} floatIntensity={floatIntensity}>
+      <group ref={anchorRef}>
+        <group ref={spin}>
+          {/* Caustics: light focused by the glass, projected onto a plane at
+              the bottle's base (the Caustics group's local y = 0). Computed
+              once — in the bottle's own space nothing changes afterwards. */}
+          <Caustics
+            ref={causticsRef}
+            position={[0, BOTTLE_BASE_Y, 0]}
+            causticsOnly={false}
+            backside={false}
+            color="#FFE6CC"
+            intensity={0.06}
+            worldRadius={0.35}
+            ior={1.2}
+            resolution={512}
+            lightSource={[5, 8, 4]}
+          >
+            <mesh castShadow geometry={kit.body} material={kit.glass} position={[0, -BOTTLE_BASE_Y, 0]}>
+              {/* The label, projected onto the curved glass */}
+              <Decal
+                position={[0, 0.02, 0.55]}
+                rotation={[0, 0, 0]}
+                scale={[0.78, 0.49, 0.5]}
+                map={kit.label}
+                polygonOffsetFactor={-10}
+              />
+            </mesh>
+          </Caustics>
+
+          <mesh geometry={kit.liquid} material={liquid} />
+          <mesh geometry={kit.pipette} material={kit.pipetteMat} position={[0, 0.2, 0]} />
+          <mesh castShadow geometry={kit.collar} material={kit.collarMat} position={[0, 1.13, 0]} />
+          <mesh geometry={kit.lip} material={kit.collarMat} position={[0, 1.03, 0]} rotation={[Math.PI / 2, 0, 0]} />
+          <mesh castShadow geometry={kit.bulb} material={kit.bulbMat} position={[0, 1.4, 0]} />
+        </group>
+      </group>
+    </Float>
+  );
+}

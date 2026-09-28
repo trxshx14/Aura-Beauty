@@ -4,15 +4,16 @@ import "./globals.css";
 
 /**
  * Editorial pairing:
- *  - Fraunces (display) — a soft, high-contrast serif with a beauty-editorial
- *    voice, exposed as --font-display and used sparingly for headlines.
+ *  - Fraunces (display) — loaded as a VARIABLE font so its SOFT and WONK
+ *    axes can be animated (see .soft-type in globals.css). Weight is left
+ *    unset on purpose: with `axes`, next/font loads the full weight range.
  *  - Manrope (body/UI) — a quiet geometric sans for copy, labels, and UI.
  */
 const display = Fraunces({
   subsets: ["latin"],
   variable: "--font-display",
-  weight: ["300", "400"],
   style: ["normal", "italic"],
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 const sans = Manrope({

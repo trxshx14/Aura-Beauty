@@ -83,9 +83,9 @@ export type Shade = (typeof SHADES)[number];
 export const HOTSPOTS = [
   {
     id: "cap",
-    offset: [0.3, 1.2, 0] as const,
+    offset: [0.28, 1.15, 0] as const,
     title: "Precision dropper",
-    body: "One press measures a single 0.5 ml dose — enough for face and neck, nothing wasted.",
+    body: "A rose-gold collar and soft bulb that draw a single 0.5 ml dose — enough for face and neck.",
   },
   {
     id: "glass",
