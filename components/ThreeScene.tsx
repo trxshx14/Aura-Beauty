@@ -96,7 +96,7 @@ type CameraPose = typeof cameraState;
 function stageLayout(width: number, height: number) {
   const aspect = width / height;
   const mobile = width < 768;
-  const base = mobile ? 10 : BASE_DISTANCE;
+  const base = mobile ? 11 : BASE_DISTANCE;
   const vw = viewWidth(base, aspect); // stage width at the base distance
   const finaleWidth = viewWidth(FINALE_DISTANCE, aspect);
   const cam = (pose: Partial<CameraPose>): CameraPose => ({
@@ -125,9 +125,9 @@ function stageLayout(width: number, height: number) {
       },
       camera: {
         // Looking lower puts the product in the top half of the screen.
-        hero: cam({ ty: -1.37 }),
-        act1: cam({ orbit: -0.35, radius: 11, height: 0.3, ty: -1.76, tz: 0.5 }),
-        act2: cam({ orbit: 0.12, ty: -1.37 }),
+        hero: cam({ ty: -1.5 }),
+        act1: cam({ orbit: -0.35, radius: 12, height: 0.3, ty: -1.76, tz: 0.5 }),
+        act2: cam({ orbit: 0.12, ty: -1.5 }),
         finale: cam({ radius: FINALE_DISTANCE, ty: -0.85 }),
       },
       ring: { finaleY: -0.9, finaleScale: 1.2 },
@@ -286,6 +286,9 @@ function StudioStage({
       {/* Satin studio floor with soft, blurred reflections. */}
       <mesh ref={refs.floor} receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.45, 0]}>
         <planeGeometry args={[80, 80]} />
+        {lite ? (
+          <meshStandardMaterial color={PALETTE.vanilla} roughness={0.9} metalness={0} />
+        ) : (
         <MeshReflectorMaterial
           color={PALETTE.vanilla}
           roughness={0.85}
@@ -298,6 +301,7 @@ function StudioStage({
           depthScale={0.8}
           minDepthThreshold={0.85}
         />
+        )}
       </mesh>
 
       {/* Hero plinth — terrazzo with a terracotta reveal line */}
@@ -403,7 +407,7 @@ function Lineup({
 /* -------------------------------------------------------------------------- */
 
 function CameraRig() {
-  const { camera, pointer } = useThree();
+  const { camera, pointer, scene } = useThree();
   const parallax = useRef({ x: 0, y: 0 });
   const enabled = useMemo(
     () =>
@@ -427,6 +431,15 @@ function CameraRig() {
       c.tz + cos * c.radius - sin * p.x
     );
     camera.lookAt(c.tx, c.ty, c.tz);
+
+    // The haze starts just behind the subject, wherever the camera is. With a
+    // fixed fog range, the phone framing (camera further back) sat inside the
+    // haze and the whole scene washed out.
+    const fog = scene.fog as THREE.Fog | null;
+    if (fog) {
+      fog.near = c.radius + 0.8;
+      fog.far = c.radius + 8.8;
+    }
   });
 
   return null;
@@ -836,7 +849,7 @@ export default function ThreeScene() {
   );
 
   const [dpr, setDpr] = useState(() =>
-    typeof window === "undefined" ? 1 : Math.min(lite ? 1.25 : 1.5, window.devicePixelRatio)
+    typeof window === "undefined" ? 1 : Math.min(lite ? 1 : 1.5, window.devicePixelRatio)
   );
 
   const bottle = useRef<THREE.Group>(null);
@@ -880,18 +893,22 @@ export default function ThreeScene() {
     <Canvas
       dpr={dpr}
       camera={{ position: [0, 0.2, BASE_DISTANCE], fov: FOV }}
-      gl={{ antialias: false, powerPreference: "high-performance" }}
+      // Desktop anti-aliases in the post-processing pass; phones skip that
+      // pass, so they use the renderer's built-in anti-aliasing instead.
+      gl={{ antialias: lite, powerPreference: "high-performance" }}
       shadows
     >
       <PerformanceMonitor
-        onIncline={() => setDpr(Math.min(2, window.devicePixelRatio))}
+        onIncline={() => setDpr(Math.min(lite ? 1.5 : 2, window.devicePixelRatio))}
         onDecline={() => setDpr(1)}
         flipflops={3}
         onFallback={() => setDpr(1)}
       />
 
       <fog attach="fog" args={[BACKDROP_HDR, 7, 15]} />
-      <SoftShadows size={24} samples={lite ? 8 : 12} focus={0.6} />
+      {/* PCSS soft shadows are the single most expensive effect on phone GPUs;
+          phones fall back to three.js's standard soft shadow maps. */}
+      {!lite && <SoftShadows size={24} samples={12} focus={0.6} />}
 
       <ambientLight intensity={0.55} color={PALETTE.vanilla} />
       <directionalLight
@@ -924,7 +941,13 @@ export default function ThreeScene() {
       {/* Hero bottle: GSAP drives the outer group; BottleModel handles float,
           spin, caustics and the label inside it. */}
       <group ref={bottle}>
-        <BottleModel kit={kit} liquid={heroLiquid} anchorRef={bottleAnchor} causticsRef={caustics} />
+        <BottleModel
+          kit={kit}
+          liquid={heroLiquid}
+          anchorRef={bottleAnchor}
+          causticsRef={caustics}
+          caustics={!lite}
+        />
       </group>
 
       <Lineup refs={refs} kit={kit} mats={stageMats} />
@@ -935,7 +958,10 @@ export default function ThreeScene() {
       <HotspotProjector refs={refs} />
       <ReadySignal />
       <StatsProbe />
-      <Effects refs={refs} lite={lite} />
+      {/* Phones skip the post-processing pass entirely. Without it, the
+          renderer applies the same ACES tone mapping itself, so colours and
+          the backdrop still match; only the depth-of-field blur is lost. */}
+      {!lite && <Effects refs={refs} lite={lite} />}
     </Canvas>
   );
 }
