@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Environment,
   Float,
   Lightformer,
   MeshReflectorMaterial,
+  PerformanceMonitor,
   SoftShadows,
   Sparkles,
 } from "@react-three/drei";
 import * as THREE from "three";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { HOTSPOTS } from "../lib/aura";
 
 gsap.registerPlugin(ScrollTrigger);
 ScrollTrigger.config({ ignoreMobileResize: true });
@@ -39,13 +41,20 @@ function clay(color: string) {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Overlay state — plain mutable values the master timeline tweens and the   */
+/*  per-frame projector reads. No React state, so scrolling never re-renders. */
+/* -------------------------------------------------------------------------- */
+
+const overlayState = { hotspots: 1 };
+
+/* -------------------------------------------------------------------------- */
 /*  Bottle materials — glass, cap, and the serum liquid inside                 */
 /* -------------------------------------------------------------------------- */
 
 type BottleMaterials = {
   glass: THREE.MeshPhysicalMaterial;
   cap: THREE.MeshStandardMaterial;
-  liquid: THREE.MeshPhysicalMaterial;
+  liquid: THREE.MeshStandardMaterial;
 };
 
 function useBottleMaterials(): BottleMaterials {
@@ -59,7 +68,7 @@ function useBottleMaterials(): BottleMaterials {
         ior: 1.4,
         clearcoat: 0.7,
         clearcoatRoughness: 0.3,
-        iridescence: 0.15, // faint premium sheen on grazing angles
+        iridescence: 0.15,
         iridescenceIOR: 1.3,
         envMapIntensity: 1.2,
         attenuationColor: new THREE.Color(PALETTE.pink),
@@ -72,15 +81,14 @@ function useBottleMaterials(): BottleMaterials {
         roughness: 0.5,
         metalness: 0.05,
       }),
-      // The serum itself, visible through the frosted glass. The shade
-      // picker tints THIS — the product changes, the vessel stays.
-      liquid: new THREE.MeshPhysicalMaterial({
+      // The serum, seen through the frosted glass. It must be OPAQUE: three.js
+      // only renders opaque objects into the transmission buffer, so a
+      // transparent/transmissive liquid would be invisible behind the glass.
+      // The shade picker tints THIS — the product changes, the vessel stays.
+      liquid: new THREE.MeshStandardMaterial({
         color: new THREE.Color("#EFC0A6"),
-        roughness: 0.35,
-        transmission: 0.4,
-        thickness: 0.8,
-        transparent: true,
-        opacity: 0.92,
+        roughness: 0.3,
+        metalness: 0,
       }),
     }),
     []
@@ -93,6 +101,8 @@ function useBottleMaterials(): BottleMaterials {
 
 type StageRefs = {
   bottle: React.RefObject<THREE.Group | null>;
+  /** Moves with the bottle AND its idle float — the hotspots' anchor. */
+  bottleAnchor: React.RefObject<THREE.Group | null>;
   heroPedestal: React.RefObject<THREE.Group | null>;
   sidePedestal: React.RefObject<THREE.Group | null>;
   steps: React.RefObject<THREE.Group | null>;
@@ -102,15 +112,18 @@ type StageRefs = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*  Product bottle — Float (idle hover) wraps a slow turntable spin, both      */
-/*  nested INSIDE the GSAP-driven group so the three motions compose.          */
+/*  Product bottle                                                             */
+/*  outer group  ← GSAP scroll transforms                                      */
+/*    Float      ← idle hover                                                  */
+/*      anchor   ← hotspots read this world position                           */
+/*        spin   ← slow turntable                                              */
 /* -------------------------------------------------------------------------- */
 
 function ProductBottle({
-  groupRef,
+  refs,
   materials,
 }: {
-  groupRef: StageRefs["bottle"];
+  refs: StageRefs;
   materials: BottleMaterials;
 }) {
   const spinRef = useRef<THREE.Group>(null);
@@ -120,33 +133,28 @@ function ProductBottle({
   });
 
   return (
-    <group ref={groupRef}>
+    <group ref={refs.bottle}>
       <Float speed={1.3} rotationIntensity={0.1} floatIntensity={0.3}>
-        <group ref={spinRef}>
-          {/* Serum inside — reads through the frosted glass */}
-          <mesh position={[0, -0.15, 0]} material={materials.liquid}>
-            <cylinderGeometry args={[0.46, 0.46, 1.15, 48]} />
-          </mesh>
-
-          {/* Glass body */}
-          <mesh castShadow material={materials.glass}>
-            <cylinderGeometry args={[0.55, 0.55, 1.6, 64]} />
-          </mesh>
-
-          {/* Rounded shoulder */}
-          <mesh
-            castShadow
-            material={materials.glass}
-            position={[0, 0.8, 0]}
-            scale={[1, 0.35, 1]}
-          >
-            <sphereGeometry args={[0.55, 48, 32]} />
-          </mesh>
-
-          {/* Cap */}
-          <mesh castShadow material={materials.cap} position={[0, 1.12, 0]}>
-            <cylinderGeometry args={[0.28, 0.3, 0.42, 48]} />
-          </mesh>
+        <group ref={refs.bottleAnchor}>
+          <group ref={spinRef}>
+            <mesh position={[0, -0.15, 0]} material={materials.liquid}>
+              <cylinderGeometry args={[0.46, 0.46, 1.15, 48]} />
+            </mesh>
+            <mesh castShadow material={materials.glass}>
+              <cylinderGeometry args={[0.55, 0.55, 1.6, 64]} />
+            </mesh>
+            <mesh
+              castShadow
+              material={materials.glass}
+              position={[0, 0.8, 0]}
+              scale={[1, 0.35, 1]}
+            >
+              <sphereGeometry args={[0.55, 48, 32]} />
+            </mesh>
+            <mesh castShadow material={materials.cap} position={[0, 1.12, 0]}>
+              <cylinderGeometry args={[0.28, 0.3, 0.42, 48]} />
+            </mesh>
+          </group>
         </group>
       </Float>
     </group>
@@ -170,10 +178,9 @@ function StudioStage({ refs }: { refs: StageRefs }) {
 
   return (
     <>
-      {/* Reflective studio floor — soft, blurred reflections under every
-          object. The single biggest "rendered, not real-time" illusion.
-          If FPS dips on weaker GPUs: drop resolution to 256, or swap back
-          to a plain MeshStandardMaterial. */}
+      {/* Satin studio floor with soft, blurred reflections. On weak GPUs,
+          PerformanceMonitor lowers DPR first; if that isn't enough, drop
+          `resolution` to 256. */}
       <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.45, 0]}>
         <planeGeometry args={[80, 80]} />
         <MeshReflectorMaterial
@@ -190,7 +197,6 @@ function StudioStage({ refs }: { refs: StageRefs }) {
         />
       </mesh>
 
-      {/* Hero pedestal */}
       <group ref={refs.heroPedestal}>
         <mesh castShadow receiveShadow material={mats.nude}>
           <cylinderGeometry args={[0.95, 0.95, 0.5, 64]} />
@@ -200,15 +206,12 @@ function StudioStage({ refs }: { refs: StageRefs }) {
         </mesh>
       </group>
 
-      {/* Side pedestal — rises in Milestone 2 */}
       <group ref={refs.sidePedestal}>
         <mesh castShadow receiveShadow material={mats.terracotta}>
           <cylinderGeometry args={[0.8, 0.8, 1.1, 64]} />
         </mesh>
       </group>
 
-      {/* Geometric steps — pushed deep into the fog so they read as a soft
-          backdrop behind the headline instead of colliding with it */}
       <group ref={refs.steps}>
         <mesh castShadow receiveShadow material={mats.terracotta}>
           <boxGeometry args={[2.6, 0.4, 2.6]} />
@@ -221,22 +224,18 @@ function StudioStage({ refs }: { refs: StageRefs }) {
         </mesh>
       </group>
 
-      {/* Marigold sphere */}
       <mesh ref={refs.sphere} castShadow material={mats.amber}>
         <sphereGeometry args={[0.38, 48, 48]} />
       </mesh>
 
-      {/* Pastel ring */}
       <mesh ref={refs.ring} material={mats.pink}>
         <torusGeometry args={[1.55, 0.055, 24, 96]} />
       </mesh>
 
-      {/* Distant monolith, deep in the fog */}
       <mesh ref={refs.column} castShadow material={mats.terracotta}>
         <boxGeometry args={[0.9, 6.5, 0.9]} />
       </mesh>
 
-      {/* Dust motes drifting through the key light — beauty-commercial air */}
       <Sparkles
         count={70}
         scale={[14, 6, 8]}
@@ -251,9 +250,7 @@ function StudioStage({ refs }: { refs: StageRefs }) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Mouse-parallax camera — the scene leans gently toward the cursor.          */
-/*  Lerped every frame, so it's silky; disabled for reduced-motion users;      */
-/*  inert on touch devices (pointer stays at 0,0).                             */
+/*  Mouse-parallax camera                                                      */
 /* -------------------------------------------------------------------------- */
 
 function CameraParallax() {
@@ -278,7 +275,135 @@ function CameraParallax() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Scroll rig — one master timeline for 3D + HTML                             */
+/*  Hotspot projector — 3D → 2D, every frame, zero React renders.              */
+/*                                                                             */
+/*  The hotspot buttons live in the page's DOM (so they sit above the text     */
+/*  layers and stay accessible). Each frame we take the bottle's world         */
+/*  position, add each hotspot's offset, project it through the camera and     */
+/*  write a translate3d straight onto the element.                             */
+/* -------------------------------------------------------------------------- */
+
+function HotspotProjector({ refs }: { refs: StageRefs }) {
+  const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
+  const elements = useRef<Map<string, HTMLElement>>(new Map());
+  const scratch = useMemo(
+    () => ({ base: new THREE.Vector3(), point: new THREE.Vector3() }),
+    []
+  );
+
+  useFrame(() => {
+    const bottle = refs.bottle.current;
+    const anchor = refs.bottleAnchor.current;
+    if (!bottle || !anchor) return;
+
+    // Hotspots are rendered by the page; collect them lazily.
+    if (elements.current.size < HOTSPOTS.length) {
+      document.querySelectorAll<HTMLElement>("[data-hotspot]").forEach((el) => {
+        elements.current.set(el.dataset.hotspot!, el);
+      });
+    }
+
+    anchor.getWorldPosition(scratch.base);
+    const scale = bottle.scale.x;
+    // Hide below the md breakpoint: on phones the bottle sits behind the copy.
+    const visibility = size.width >= 768 ? overlayState.hotspots : 0;
+
+    for (const spot of HOTSPOTS) {
+      const el = elements.current.get(spot.id);
+      if (!el) continue;
+
+      scratch.point
+        .set(spot.offset[0], spot.offset[1], spot.offset[2])
+        .multiplyScalar(scale)
+        .add(scratch.base)
+        .project(camera);
+
+      const x = (scratch.point.x * 0.5 + 0.5) * size.width;
+      const y = (-scratch.point.y * 0.5 + 0.5) * size.height;
+
+      el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+      el.style.opacity = visibility.toFixed(3);
+
+      const nextVisibility = visibility > 0.02 ? "visible" : "hidden";
+      if (el.style.visibility !== nextVisibility) el.style.visibility = nextVisibility;
+
+      // Flip the label to the left when it would run off the right edge.
+      const side = x > size.width - 340 ? "left" : "right";
+      if (el.dataset.side !== side) el.dataset.side = side;
+    }
+  });
+
+  return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Ready signal — fires after the 3rd frame, i.e. once every shader has       */
+/*  compiled and the scene is genuinely on screen. The preloader waits on it.  */
+/* -------------------------------------------------------------------------- */
+
+function ReadySignal() {
+  const frames = useRef(0);
+  useFrame(() => {
+    frames.current += 1;
+    if (frames.current === 3) {
+      window.__auraReady = true;
+      window.dispatchEvent(new Event("aura:ready"));
+    }
+  });
+  return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Stats probe — FPS, frame time, draw calls and triangles for the HUD.       */
+/*  gl.info.autoReset is disabled so the counts include every render pass in   */
+/*  a frame (shadow map + floor reflection + main pass), not just the last.    */
+/* -------------------------------------------------------------------------- */
+
+function StatsProbe() {
+  const gl = useThree((s) => s.gl);
+  const window_ = useRef({ frames: 0, start: 0 });
+
+  useEffect(() => {
+    gl.info.autoReset = false;
+    return () => {
+      gl.info.autoReset = true;
+    };
+  }, [gl]);
+
+  useFrame(() => {
+    const calls = gl.info.render.calls;
+    const triangles = gl.info.render.triangles;
+    gl.info.reset();
+
+    const w = window_.current;
+    const now = performance.now();
+    if (w.start === 0) w.start = now;
+    w.frames += 1;
+
+    const elapsed = now - w.start;
+    if (elapsed >= 500) {
+      window.dispatchEvent(
+        new CustomEvent("aura:stats", {
+          detail: {
+            fps: (w.frames * 1000) / elapsed,
+            ms: elapsed / w.frames,
+            calls,
+            triangles,
+            dpr: gl.getPixelRatio(),
+          },
+        })
+      );
+      w.frames = 0;
+      w.start = now;
+    }
+  });
+
+  return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Scroll rig — one master timeline for 3D + HTML + overlays                  */
 /* -------------------------------------------------------------------------- */
 
 function ScrollRig({
@@ -312,12 +437,14 @@ function ScrollRig({
 
       heroPedestal.position.set(HERO_X, -1.2, 0);
       sidePedestal.position.set(EDGE_X, -3.4, 0.2);
-      // Backdrop depth: far enough into the fog to sit BEHIND the type
-      steps.position.set(-vw * 0.18, -1.3, -3.4);
+      // Props frame the bottle on the right; the left half stays clear so
+      // the headline reads against clean cream, not against blocks.
+      steps.position.set(vw * 0.42, -1.3, -4.2);
       sphere.position.set(vw * 0.05, -0.7, -1.4);
       ring.position.set(HERO_X, 0.15, -2.1);
       ring.rotation.set(0, 0, 0.2);
-      column.position.set(-vw * 0.3, 1.4, -6);
+      column.position.set(-vw * 0.55, 1.4, -8); // a faint ghost pillar deep in the fog
+      overlayState.hotspots = 1;
     };
 
     const mm = gsap.matchMedia();
@@ -336,11 +463,12 @@ function ScrollRig({
         },
       });
 
-      /* ------- Milestone 1 · t ∈ [0, 1] — restrained macro zoom -------
-         The bottle presents itself in the channel between the headline
-         (left) and the ledger card (right): closer, taller, but never a
-         wall of glass. */
-      tl.to(bottle.rotation, { y: `+=${Math.PI}`, duration: 1 }, 0)
+      // Progress rail fill spans the whole timeline (0 → 2).
+      tl.fromTo("[data-progress-fill]", { scaleY: 0 }, { scaleY: 1, duration: 2 }, 0);
+
+      /* ------- Milestone 1 · t ∈ [0, 1] — restrained macro zoom ------- */
+      tl.to(overlayState, { hotspots: 0, duration: 0.18 }, 0.02) // pins leave first
+        .to(bottle.rotation, { y: `+=${Math.PI}`, duration: 1 }, 0)
         .to(bottle.scale, { x: 1.12, y: 1.12, z: 1.12, duration: 1 }, 0)
         .to(bottle.position, { x: 0, y: 0.1, z: 0.9, duration: 1 }, 0)
         .to(heroPedestal.position, { y: -2.7, duration: 1 }, 0)
@@ -363,7 +491,7 @@ function ScrollRig({
           { autoAlpha: 1, x: 0, duration: 0.25, stagger: 0.07 },
           0.62
         )
-        .to("[data-progress='1']", { opacity: 0.3, duration: 0.2 }, 0.5)
+        .to("[data-progress='1']", { opacity: 0.35, duration: 0.2 }, 0.5)
         .to("[data-progress='2']", { opacity: 1, duration: 0.2 }, 0.5);
 
       /* ------- Milestone 2 · t ∈ [1, 2] — the shade counter ------- */
@@ -382,28 +510,37 @@ function ScrollRig({
           { autoAlpha: 1, y: 0, duration: 0.4 },
           1.5
         )
-        .to("[data-progress='2']", { opacity: 0.3, duration: 0.2 }, 1.5)
+        .to("[data-progress='2']", { opacity: 0.35, duration: 0.2 }, 1.5)
         .to("[data-progress='3']", { opacity: 1, duration: 0.2 }, 1.5);
     });
 
+    // Reduced motion: static composition; hotspots simply hide once the
+    // hero has scrolled away (a visibility switch, not an animation).
     mm.add("(prefers-reduced-motion: reduce)", () => {
       setInitialPose();
       gsap.set(
         "[data-panel='hero'], [data-panel='formula'], [data-panel='shades'], [data-formula-row], [data-progress]",
         { autoAlpha: 1, y: 0, x: 0, opacity: 1 }
       );
+      ScrollTrigger.create({
+        trigger: "#scroll-container",
+        start: "top top",
+        end: "bottom bottom",
+        onUpdate: (self) => {
+          overlayState.hotspots = self.progress < 0.1 ? 1 : 0;
+          gsap.set("[data-progress-fill]", { scaleY: self.progress });
+        },
+      });
     });
 
     return () => mm.revert();
   }, [viewport.width, refs, materials]);
 
-  /* ---- DOM → WebGL bridge: shade selection tints the SERUM ------------- */
+  /* ---- DOM → WebGL: a selected shade tints the serum ------------------- */
   useEffect(() => {
-    const onShade = (e: Event) => {
-      const hex = (e as CustomEvent<string>).detail;
-      // Liquid takes the shade almost verbatim (the product changes)...
+    const onShade = (e: CustomEvent<string>) => {
+      const hex = e.detail;
       const liquidTint = new THREE.Color(hex).lerp(new THREE.Color("#ffffff"), 0.15);
-      // ...while the glass only warms toward it (the vessel stays glass).
       const glassTint = new THREE.Color(hex).lerp(new THREE.Color("#ffffff"), 0.65);
       gsap.to(materials.liquid.color, {
         r: liquidTint.r,
@@ -434,23 +571,43 @@ function ScrollRig({
 export default function ThreeScene() {
   const materials = useBottleMaterials();
 
-  const refs: StageRefs = {
-    bottle: useRef<THREE.Group>(null),
-    heroPedestal: useRef<THREE.Group>(null),
-    sidePedestal: useRef<THREE.Group>(null),
-    steps: useRef<THREE.Group>(null),
-    sphere: useRef<THREE.Mesh>(null),
-    ring: useRef<THREE.Mesh>(null),
-    column: useRef<THREE.Mesh>(null),
-  };
+  // Adaptive resolution: start at up to 1.5×, let PerformanceMonitor move it
+  // between 1× and 2× depending on the frame rate this device sustains.
+  const [dpr, setDpr] = useState(() =>
+    typeof window === "undefined" ? 1 : Math.min(1.5, window.devicePixelRatio)
+  );
+
+  const bottle = useRef<THREE.Group>(null);
+  const bottleAnchor = useRef<THREE.Group>(null);
+  const heroPedestal = useRef<THREE.Group>(null);
+  const sidePedestal = useRef<THREE.Group>(null);
+  const steps = useRef<THREE.Group>(null);
+  const sphere = useRef<THREE.Mesh>(null);
+  const ring = useRef<THREE.Mesh>(null);
+  const column = useRef<THREE.Mesh>(null);
+
+  // One stable object for the whole lifetime of the scene. If this were
+  // rebuilt on every render, a DPR change would tear down and rebuild the
+  // scroll timeline (it depends on `refs`).
+  const refs = useMemo<StageRefs>(
+    () => ({ bottle, bottleAnchor, heroPedestal, sidePedestal, steps, sphere, ring, column }),
+    []
+  );
 
   return (
     <Canvas
-      dpr={[1, 2]}
+      dpr={dpr}
       camera={{ position: [0, 0.2, 6.2], fov: 35 }}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
       shadows
     >
+      <PerformanceMonitor
+        onIncline={() => setDpr(Math.min(2, window.devicePixelRatio))}
+        onDecline={() => setDpr(1)}
+        flipflops={3}
+        onFallback={() => setDpr(1)}
+      />
+
       <fog attach="fog" args={[PALETTE.vanilla, 7, 15]} />
       <SoftShadows size={24} samples={12} focus={0.6} />
 
@@ -493,9 +650,12 @@ export default function ThreeScene() {
       </Environment>
 
       <StudioStage refs={refs} />
-      <ProductBottle groupRef={refs.bottle} materials={materials} />
+      <ProductBottle refs={refs} materials={materials} />
       <ScrollRig refs={refs} materials={materials} />
       <CameraParallax />
+      <HotspotProjector refs={refs} />
+      <ReadySignal />
+      <StatsProbe />
     </Canvas>
   );
 }

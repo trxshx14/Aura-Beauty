@@ -70,12 +70,35 @@ canvas {
   animation: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Hotspot pulse: a soft ring that breathes out from each pin. */
+@keyframes hotspot-ping {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.9;
+  }
+  80%,
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.hotspot-ping {
+  animation: hotspot-ping 2.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Custom cursor: hide the system cursor only while ours is mounted
+   (precise pointer + motion allowed — see CustomCursor.tsx). */
+.has-custom-cursor,
+.has-custom-cursor * {
+  cursor: none !important;
+}
+
 /* Accessibility: kill decorative motion for users who ask for less. */
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track {
-    animation: none;
-  }
-  .animate-fade-up {
+  .marquee-track,
+  .animate-fade-up,
+  .hotspot-ping {
     animation: none;
   }
 }

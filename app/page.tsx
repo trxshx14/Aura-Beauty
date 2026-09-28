@@ -1,51 +1,29 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
+import { PRICE_PHP, SHADES, formatPHP, type Shade } from "../lib/aura";
+import MagneticButton from "../components/ui/MagneticButton";
+import Preloader from "../components/ui/Preloader";
+import Hotspots from "../components/ui/Hotspots";
+import CustomCursor from "../components/ui/CustomCursor";
+import PerfHud from "../components/ui/PerfHud";
+import BagDrawer, { type BagLine } from "../components/ui/BagDrawer";
 
 const ThreeScene = dynamic(() => import("../components/ThreeScene"), {
   ssr: false,
 });
 
 /* -------------------------------------------------------------------------- */
-/*  Shade data — hex values double as the live tint sent to the 3D bottle      */
+/*  Content                                                                    */
 /* -------------------------------------------------------------------------- */
 
-const SHADES = [
-  {
-    id: "01",
-    name: "Rosewater",
-    hex: "#E8C4BC",
-    note: "Cool pink undertones — fair to light skin.",
-  },
-  {
-    id: "02",
-    name: "Nude Veil",
-    hex: "#D9B49B",
-    note: "Neutral beige — light to medium skin.",
-  },
-  {
-    id: "03",
-    name: "Terra",
-    hex: "#B98166",
-    note: "Warm clay undertones — medium to tan skin.",
-  },
-  {
-    id: "04",
-    name: "Amber Silk",
-    hex: "#8F5B45",
-    note: "Golden amber depth — tan to deep skin.",
-  },
-] as const;
-
-type Shade = (typeof SHADES)[number];
-
 const INGREDIENTS = [
-  ["Niacinamide", "barrier repair"],
-  ["Salycic Acid", "luminosity"],
-  ["Azelaic Acid", "gentle refinement"],
-  ["Aloe Vera", "calm + comfort"],
+  ["Niacinamide", "barrier + tone"],
+  ["Salicylic Acid", "clears pores"],
+  ["Azelaic Acid", "calms redness"],
+  ["Aloe Vera", "soothes + hydrates"],
 ] as const;
 
 const MARQUEE_ITEMS = [
@@ -54,78 +32,188 @@ const MARQUEE_ITEMS = [
   "100% vegan",
   "Frosted glass, fully recyclable",
   "No fragrance",
-  "Cold-pressed",
+  "Non-comedogenic",
 ];
+
+const SECTIONS = [
+  { n: "01", label: "Vessel" },
+  { n: "02", label: "Formula" },
+  { n: "03", label: "Shades" },
+] as const;
 
 /* Subtle film grain (inline SVG) — printed, editorial texture. */
 const GRAIN =
   "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E\")";
 
+const focusRing =
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B2927] focus-visible:ring-offset-4 focus-visible:ring-offset-[#FBF7F4]";
+
+const prefersReducedMotion = () =>
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 /* -------------------------------------------------------------------------- */
-/*  MagneticButton — the CTA leans toward the cursor and snaps back with an    */
-/*  elastic ease on leave. A signature awwwards-style micro-interaction in     */
-/*  ~20 lines. Touch devices never fire mousemove, so it degrades cleanly.     */
+/*  Fly-to-bag: a dot in the shade's colour arcs from the button to the bag   */
+/*  counter. x and y use different eases, which is what bends the path.       */
 /* -------------------------------------------------------------------------- */
 
-function MagneticButton({
-  children,
-  className = "",
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const ref = useRef<HTMLButtonElement>(null);
+function flyToBag(from: Element, to: Element, color: string, onArrive: () => void) {
+  const a = from.getBoundingClientRect();
+  const b = to.getBoundingClientRect();
+  const size = 14;
+  const dot = document.createElement("div");
+  Object.assign(dot.style, {
+    position: "fixed",
+    left: `${a.left + a.width / 2 - size / 2}px`,
+    top: `${a.top + a.height / 2 - size / 2}px`,
+    width: `${size}px`,
+    height: `${size}px`,
+    borderRadius: "9999px",
+    background: color,
+    boxShadow: "0 0 0 3px #FBF7F4, 0 6px 16px rgba(43,41,39,0.25)",
+    zIndex: "65",
+    pointerEvents: "none",
+  });
+  document.body.appendChild(dot);
 
-  const onMove = (e: React.MouseEvent) => {
-    const el = ref.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const dx = e.clientX - (rect.left + rect.width / 2);
-    const dy = e.clientY - (rect.top + rect.height / 2);
-    gsap.to(el, { x: dx * 0.35, y: dy * 0.35, duration: 0.4, ease: "power3.out" });
-  };
+  const dx = b.left + b.width / 2 - (a.left + a.width / 2);
+  const dy = b.top + b.height / 2 - (a.top + a.height / 2);
 
-  const onLeave = () => {
-    gsap.to(ref.current, {
-      x: 0,
-      y: 0,
-      duration: 0.7,
-      ease: "elastic.out(1, 0.35)",
-    });
-  };
-
-  return (
-    <button
-      ref={ref}
-      type="button"
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-      className={className}
-      {...props}
-    >
-      {children}
-    </button>
-  );
+  gsap
+    .timeline({
+      onComplete: () => {
+        dot.remove();
+        onArrive();
+      },
+    })
+    .to(dot, { x: dx, duration: 0.85, ease: "power1.inOut" }, 0)
+    .to(dot, { y: dy, duration: 0.85, ease: "back.in(1.3)" }, 0)
+    .to(dot, { scale: 0.45, duration: 0.85, ease: "power2.in" }, 0);
 }
 
 /* -------------------------------------------------------------------------- */
 
 export default function Page() {
   const [activeShade, setActiveShade] = useState<Shade>(SHADES[0]);
+  const [lines, setLines] = useState<BagLine[]>([]);
+  const [bagOpen, setBagOpen] = useState(false);
+  const [hudOpen, setHudOpen] = useState(false);
+  const [toast, setToast] = useState<{ key: number; text: string } | null>(null);
 
+  const bagButton = useRef<HTMLButtonElement>(null);
+  const bagCount = useRef<HTMLSpanElement>(null);
+  const count = lines.reduce((n, l) => n + l.qty, 0);
+
+  /* ---- Shade selection → WebGL ----------------------------------------- */
   const selectShade = (shade: Shade) => {
     setActiveShade(shade);
-    // DOM → WebGL bridge: ThreeScene listens and tints the glass material.
     window.dispatchEvent(new CustomEvent("aura:shade", { detail: shade.hex }));
   };
 
+  /* ---- Intro: runs as the preloader curtain lifts ---------------------- */
+  const onReveal = useCallback(() => {
+    if (prefersReducedMotion()) return;
+    gsap.from("[data-intro-line]", {
+      yPercent: 115,
+      duration: 1.2,
+      ease: "expo.out",
+      stagger: 0.09,
+      delay: 0.25,
+    });
+    gsap.from("[data-intro-fade]", {
+      autoAlpha: 0,
+      y: 14,
+      duration: 0.9,
+      ease: "power2.out",
+      stagger: 0.08,
+      delay: 0.6,
+    });
+    gsap.from("[data-hotspot-pin]", {
+      autoAlpha: 0,
+      x: -10,
+      duration: 0.7,
+      ease: "power3.out",
+      stagger: 0.12,
+      delay: 1.0,
+    });
+  }, []);
+
+  /* ---- Bag ------------------------------------------------------------- */
+  const addToBag = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const shade = activeShade;
+    const commit = () => {
+      setLines((prev) => {
+        const existing = prev.find((l) => l.shadeId === shade.id);
+        return existing
+          ? prev.map((l) => (l.shadeId === shade.id ? { ...l, qty: l.qty + 1 } : l))
+          : [...prev, { shadeId: shade.id, qty: 1 }];
+      });
+      setToast({ key: Date.now(), text: `${shade.name} added to your bag` });
+      if (bagCount.current && !prefersReducedMotion()) {
+        gsap.fromTo(
+          bagCount.current,
+          { scale: 1.7, color: "#C97B5D" },
+          { scale: 1, color: "#2B2927", duration: 0.7, ease: "elastic.out(1, 0.4)" }
+        );
+      }
+    };
+    if (prefersReducedMotion() || !bagCount.current) commit();
+    else flyToBag(e.currentTarget, bagCount.current, shade.hex, commit);
+  };
+
+  const changeQty = useCallback((shadeId: Shade["id"], delta: number) => {
+    setLines((prev) =>
+      prev.map((l) => (l.shadeId === shadeId ? { ...l, qty: Math.max(1, l.qty + delta) } : l))
+    );
+  }, []);
+
+  const removeLine = useCallback((shadeId: Shade["id"]) => {
+    setLines((prev) => prev.filter((l) => l.shadeId !== shadeId));
+  }, []);
+
+  const closeBag = useCallback(() => setBagOpen(false), []);
+
+  const goToSection = useCallback((index: number) => {
+    window.scrollTo({
+      top: index * window.innerHeight,
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+  }, []);
+
+  const browseShades = useCallback(() => {
+    setBagOpen(false);
+    // Let the drawer release its scroll lock first.
+    window.setTimeout(() => goToSection(2), 60);
+  }, [goToSection]);
+
+  /* ---- Toast auto-dismiss ---------------------------------------------- */
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3600);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  /* ---- "D" toggles the render-stats HUD -------------------------------- */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "d" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement;
+      if (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)) return;
+      setHudOpen((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <main className="bg-[#FBF7F4] text-[#2B2927]">
+      <Preloader onReveal={onReveal} />
+
       {/* LAYER 0 — fixed 3D stage */}
       <div className="fixed inset-0 z-0 h-screen w-full pointer-events-none">
         <ThreeScene />
       </div>
 
-      {/* LAYER 1 — atmosphere washes above the canvas: they tint the render
-          itself, fusing scene + page and dissolving the floor horizon. */}
+      {/* LAYER 1 — atmosphere washes above the canvas */}
       <div aria-hidden className="pointer-events-none fixed inset-0 z-[1]">
         <div className="absolute right-[-12%] top-[-18%] h-[75vh] w-[75vh] rounded-full bg-[#E8A852]/[0.13] blur-[130px]" />
         <div className="absolute bottom-[-22%] left-[-12%] h-[85vh] w-[85vh] rounded-full bg-[#F2C9C0]/[0.35] blur-[150px]" />
@@ -140,38 +228,72 @@ export default function Page() {
         style={{ backgroundImage: GRAIN }}
       />
 
+      {/* LAYER 3 — overlays positioned by the 3D scene */}
+      <Hotspots />
+
       {/* LAYER 3 — fixed chrome */}
       <header className="fixed inset-x-0 top-0 z-20 flex items-center justify-between px-8 py-6 md:px-16 lg:px-24">
         <a
           href="#"
-          className="[font-family:var(--font-display)] text-xl tracking-tight text-[#2B2927] no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B2927] focus-visible:ring-offset-4 focus-visible:ring-offset-[#FBF7F4]"
+          data-cursor=""
+          onClick={(e) => {
+            e.preventDefault();
+            goToSection(0);
+          }}
+          className={`[font-family:var(--font-display)] text-xl tracking-tight text-[#2B2927] no-underline ${focusRing}`}
         >
           AURA<sup className="align-super text-[10px]">®</sup>
         </a>
         <div className="flex items-center gap-8 text-[11px] uppercase tracking-[0.3em] text-[#2B2927]/60">
           <span className="hidden md:inline">Serum Nº1 — 2026</span>
-          <a
-            href="#"
-            className="text-[#2B2927] no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B2927] focus-visible:ring-offset-4 focus-visible:ring-offset-[#FBF7F4]"
+          <button
+            ref={bagButton}
+            type="button"
+            data-cursor="Bag"
+            aria-haspopup="dialog"
+            aria-label={`Open bag, ${count} ${count === 1 ? "item" : "items"}`}
+            onClick={() => setBagOpen(true)}
+            className={`uppercase tracking-[0.3em] text-[#2B2927] ${focusRing}`}
           >
-            Bag (0)
-          </a>
+            Bag (<span ref={bagCount} className="inline-block tabular-nums">{count}</span>)
+          </button>
         </div>
       </header>
 
+      {/* Progress rail — numbers are buttons that jump to each act; the
+          hairline fills with the same master timeline that drives the 3D. */}
       <nav
-        aria-label="Scroll progress"
-        className="fixed right-8 top-1/2 z-20 hidden -translate-y-1/2 flex-col gap-6 text-[10px] uppercase tracking-[0.3em] md:flex"
+        aria-label="Sections"
+        className="fixed right-6 top-1/2 z-20 hidden -translate-y-1/2 items-stretch gap-4 md:flex"
       >
-        <span data-progress="1" className="opacity-100">
-          01 — Vessel
-        </span>
-        <span data-progress="2" className="opacity-30">
-          02 — Formula
-        </span>
-        <span data-progress="3" className="opacity-30">
-          03 — Shades
-        </span>
+        <ol className="flex flex-col justify-between gap-7">
+          {SECTIONS.map((s, i) => (
+            <li key={s.n}>
+              <button
+                type="button"
+                data-progress={i + 1}
+                data-cursor=""
+                onClick={() => goToSection(i)}
+                aria-label={`Go to ${s.label}`}
+                className={`group flex w-full items-center justify-end gap-3 text-[10px] uppercase tracking-[0.25em] ${
+                  i === 0 ? "opacity-100" : "opacity-35"
+                } ${focusRing}`}
+              >
+                <span className="translate-x-2 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100">
+                  {s.label}
+                </span>
+                <span className="tabular-nums">{s.n}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+        <div className="relative w-px bg-[#2B2927]/15">
+          <div
+            data-progress-fill
+            className="absolute inset-0 origin-top bg-[#C97B5D]"
+            style={{ transform: "scaleY(0)" }}
+          />
+        </div>
       </nav>
 
       {/* ------------------------------------------------------------------ */}
@@ -181,7 +303,6 @@ export default function Page() {
         {/* ---------------- Section 1 — Hero showcase ---------------- */}
         <section className="relative flex h-screen w-full items-center overflow-hidden">
           <div data-panel="hero" className="relative h-full w-full">
-            {/* Ghost watermark behind the composition */}
             <span
               aria-hidden
               className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none [font-family:var(--font-display)] text-[clamp(8rem,24vw,22rem)] font-light leading-none tracking-tighter text-[#C97B5D]/[0.06]"
@@ -191,25 +312,44 @@ export default function Page() {
 
             <div className="relative mx-auto flex h-full w-full max-w-7xl items-center px-8 md:px-16 lg:px-24">
               <div className="max-w-2xl">
-                <p className="mb-8 flex items-center gap-4 text-xs font-medium uppercase tracking-[0.35em] text-[#2B2927]/60">
+                <p
+                  data-intro-fade
+                  className="mb-8 flex items-center gap-4 text-xs font-medium uppercase tracking-[0.35em] text-[#2B2927]/60"
+                >
                   <span className="inline-block h-px w-8 bg-[#C97B5D]" />
                   Aura Beauty — Serum Nº1
                 </p>
-                {/* clamp() sizing: dramatic at every viewport, and it can
-                    never explode if a breakpoint variant fails to compile. */}
+                {/* Each line sits in its own overflow mask so it can rise
+                    into view; the padding keeps descenders from clipping. */}
                 <h1 className="[font-family:var(--font-display)] text-[clamp(3.25rem,8vw,8.5rem)] font-light leading-[0.95] tracking-tight">
-                  Skin,
-                  <br />
-                  <span className="ml-[0.8em]">in its own</span>
-                  <br />
-                  <span className="italic text-[#C97B5D]">light.</span>
+                  <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em]">
+                    <span data-intro-line className="block">
+                      Skin,
+                    </span>
+                  </span>
+                  <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em]">
+                    <span data-intro-line className="block pl-[0.8em]">
+                      in its own
+                    </span>
+                  </span>
+                  <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em] pr-[0.2em]">
+                    <span data-intro-line className="block italic text-[#C97B5D]">
+                      light.
+                    </span>
+                  </span>
                 </h1>
                 <div className="mt-12 flex flex-wrap items-end gap-x-16 gap-y-8">
-                  <p className="max-w-xs text-sm leading-relaxed text-[#2B2927]/60">
+                  <p
+                    data-intro-fade
+                    className="max-w-xs text-sm leading-relaxed text-[#2B2927]/60"
+                  >
                     A weightless botanical serum, distilled to seven
                     ingredients. Nothing your skin doesn&apos;t recognize.
                   </p>
-                  <p className="flex items-center gap-3 text-[11px] uppercase tracking-[0.3em] text-[#2B2927]/40">
+                  <p
+                    data-intro-fade
+                    className="flex items-center gap-3 text-[11px] uppercase tracking-[0.3em] text-[#2B2927]/40"
+                  >
                     Scroll to explore
                     <span className="inline-block h-8 w-px animate-pulse bg-[#2B2927]/30" />
                   </p>
@@ -217,10 +357,10 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Infinite editorial marquee along the hero's bottom edge.
-                Two identical copies + translateX(-50%) = seamless loop.
-                Pauses on hover; disabled under prefers-reduced-motion. */}
-            <div className="absolute inset-x-0 bottom-0 overflow-hidden border-t border-[#2B2927]/10 py-4">
+            <div
+              data-intro-fade
+              className="absolute inset-x-0 bottom-0 overflow-hidden border-t border-[#2B2927]/10 py-4"
+            >
               <div className="marquee-track" aria-hidden>
                 {[0, 1].map((copy) => (
                   <div
@@ -247,7 +387,6 @@ export default function Page() {
               data-panel="formula"
               className="grid items-center gap-10 opacity-0 will-change-transform lg:grid-cols-2"
             >
-              {/* Left column: structural display typography */}
               <div>
                 <p className="mb-4 text-xs font-medium uppercase tracking-[0.35em] text-[#C97B5D]">
                   02 — The Clean Formula
@@ -260,14 +399,12 @@ export default function Page() {
                   <span className="italic text-[#C97B5D]">Zero noise.</span>
                 </h2>
                 <p className="mt-6 max-w-sm text-sm leading-relaxed text-[#2B2927]/60">
-                  Cold-pressed squalane, fermented rice water, and a whisper of
-                  blush clay — suspended in frosted glass that shields every
-                  drop from light.
+                  Niacinamide and two gentle acids, buffered with aloe —
+                  suspended in frosted glass that shields every drop from
+                  light.
                 </p>
               </div>
 
-              {/* Right column: the ledger card. Each row carries
-                  data-formula-row so the master timeline staggers them in. */}
               <div className="max-w-md rounded-2xl bg-[#FBF7F4]/85 p-10 shadow-[0_24px_80px_-32px_rgba(43,41,39,0.18)] ring-1 ring-[#F2C9C0]/70 backdrop-blur-md lg:justify-self-end">
                 <ul className="space-y-4 text-sm">
                   {INGREDIENTS.map(([name, role]) => (
@@ -321,8 +458,6 @@ export default function Page() {
                 03 — Find Your Shade
               </p>
 
-              {/* The shade name IS the headline. The changing key remounts
-                  the span, replaying .animate-fade-up on every selection. */}
               <div className="min-h-[7.5rem] md:min-h-[9rem]">
                 <p className="[font-family:var(--font-display)] text-2xl italic text-[#2B2927]/45 md:text-3xl">
                   {activeShade.id} —
@@ -336,11 +471,10 @@ export default function Page() {
                 </h2>
               </div>
               <p className="mt-4 max-w-sm text-sm text-[#2B2927]/55">
-                {activeShade.note} Select a shade — the vessel tints in real
+                {activeShade.note} Select a shade — the serum tints in real
                 time.
               </p>
 
-              {/* Swatches */}
               <div className="mt-10 flex items-center gap-5">
                 {SHADES.map((shade) => {
                   const isActive = shade.id === activeShade.id;
@@ -348,6 +482,7 @@ export default function Page() {
                     <button
                       key={shade.id}
                       type="button"
+                      data-cursor="Select"
                       onClick={() => selectShade(shade)}
                       aria-label={`Select shade ${shade.id} ${shade.name}`}
                       aria-pressed={isActive}
@@ -374,18 +509,69 @@ export default function Page() {
               </div>
 
               <MagneticButton
-                className="mt-12 rounded-full bg-[#2B2927] px-10 py-4 text-xs font-medium uppercase tracking-[0.3em] text-[#FBF7F4] transition-colors duration-300 hover:bg-[#C97B5D] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B2927] focus-visible:ring-offset-4 focus-visible:ring-offset-[#FBF7F4]"
+                data-cursor="Add"
+                onClick={addToBag}
+                className={`mt-12 rounded-full bg-[#2B2927] px-10 py-4 text-xs font-medium uppercase tracking-[0.3em] text-[#FBF7F4] transition-colors duration-300 hover:bg-[#C97B5D] ${focusRing}`}
               >
-                Add to bag — ₱1,500
+                Add to bag — {formatPHP(PRICE_PHP)}
               </MagneticButton>
 
-              <p className="mt-14 text-[10px] uppercase tracking-[0.3em] text-[#2B2927]/35">
-                Aura Beauty © 2026 — Designed &amp; built by Trisha Raye
-              </p>
+              <div className="mt-14 flex flex-wrap items-center gap-x-6 gap-y-2 text-[10px] uppercase tracking-[0.3em] text-[#2B2927]/35">
+                <p>Aura Beauty © 2026 — Designed &amp; built by Trisha Raye</p>
+                <button
+                  type="button"
+                  data-cursor=""
+                  onClick={() => setHudOpen((v) => !v)}
+                  aria-pressed={hudOpen}
+                  className={`uppercase tracking-[0.3em] underline-offset-4 hover:text-[#2B2927] hover:underline ${focusRing}`}
+                >
+                  Render stats <kbd className="font-mono normal-case tracking-normal">[D]</kbd>
+                </button>
+              </div>
             </div>
           </div>
         </section>
       </div>
+
+      {/* Toast — announced politely to screen readers */}
+      <div
+        role="status"
+        aria-live="polite"
+        className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4"
+      >
+        {toast && (
+          <div
+            key={toast.key}
+            className="animate-fade-up pointer-events-auto flex items-center gap-5 rounded-full bg-[#2B2927] py-2 pl-5 pr-2 text-xs text-[#FBF7F4] shadow-[0_18px_40px_-16px_rgba(43,41,39,0.6)]"
+          >
+            <span>{toast.text}</span>
+            <button
+              type="button"
+              data-cursor=""
+              onClick={() => {
+                setToast(null);
+                setBagOpen(true);
+              }}
+              className="rounded-full bg-[#FBF7F4] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.25em] text-[#2B2927] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E8A852]"
+            >
+              View bag
+            </button>
+          </div>
+        )}
+      </div>
+
+      <BagDrawer
+        open={bagOpen}
+        lines={lines}
+        onClose={closeBag}
+        onChangeQty={changeQty}
+        onRemove={removeLine}
+        onBrowse={browseShades}
+        returnFocusTo={bagButton}
+      />
+
+      <PerfHud open={hudOpen} onClose={() => setHudOpen(false)} />
+      <CustomCursor />
     </main>
   );
 }
