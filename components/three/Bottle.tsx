@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Caustics, Decal, Float } from "@react-three/drei";
 import * as THREE from "three";
@@ -124,6 +124,42 @@ export function createLiquidMaterial(hex: string) {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Sloshing serum                                                             */
+/*                                                                             */
+/*  The liquid's surface is its top ring of vertices (y ≥ 0.27). A few lines  */
+/*  injected into the material's vertex shader tilt that ring by a slope      */
+/*  (uSlosh.x per unit x, uSlosh.y per unit z). Each frame, a damped spring    */
+/*  drives the slope from the bottle's horizontal acceleration: when the       */
+/*  bottle is pushed one way the serum lags and piles up on the other side,    */
+/*  overshoots, and settles — exactly how a real liquid behaves.               */
+/* -------------------------------------------------------------------------- */
+
+const SURFACE_Y = 0.27; // just below the liquid's flat top (0.28)
+
+function enableSlosh(material: THREE.Material) {
+  const existing = material.userData.slosh as { value: THREE.Vector2 } | undefined;
+  if (existing) return existing;
+
+  const uniform = { value: new THREE.Vector2() };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSlosh = uniform;
+    shader.vertexShader =
+      "uniform vec2 uSlosh;\n" +
+      shader.vertexShader.replace(
+        "#include <begin_vertex>",
+        `#include <begin_vertex>
+        if (position.y > ${SURFACE_Y.toFixed(2)}) {
+          transformed.y += uSlosh.x * position.x + uSlosh.y * position.z;
+        }`
+      );
+  };
+  material.customProgramCacheKey = () => "aura-slosh";
+  material.userData.slosh = uniform;
+  material.needsUpdate = true;
+  return uniform;
+}
+
+/* -------------------------------------------------------------------------- */
 
 export function BottleModel({
   kit,
@@ -146,9 +182,60 @@ export function BottleModel({
   caustics?: boolean;
 }) {
   const spin = useRef<THREE.Group>(null);
+  const slosh = useMemo(() => enableSlosh(liquid), [liquid]);
+  const sim = useMemo(
+    () => ({
+      ready: false,
+      pos: new THREE.Vector3(),
+      prevPos: new THREE.Vector3(),
+      vel: new THREE.Vector3(),
+      prevVel: new THREE.Vector3(),
+      acc: new THREE.Vector3(),
+      tilt: new THREE.Vector2(), // current surface slope (world x, world z)
+      tiltVel: new THREE.Vector2(),
+      q: new THREE.Quaternion(),
+      local: new THREE.Vector3(),
+    }),
+    []
+  );
 
   useFrame((_, delta) => {
-    if (spin.current) spin.current.rotation.y += delta * spinSpeed;
+    const g = spin.current;
+    if (!g) return;
+    g.rotation.y += delta * spinSpeed;
+
+    const dt = Math.min(Math.max(delta, 1 / 240), 1 / 30);
+    const s = sim;
+    g.getWorldPosition(s.pos);
+    if (!s.ready) {
+      s.prevPos.copy(s.pos);
+      s.ready = true;
+      return;
+    }
+
+    // Velocity → acceleration, lightly smoothed (frame-to-frame values are noisy).
+    s.vel.subVectors(s.pos, s.prevPos).divideScalar(dt);
+    s.acc.lerp(s.local.subVectors(s.vel, s.prevVel).divideScalar(dt), 0.25);
+    s.prevPos.copy(s.pos);
+    s.prevVel.copy(s.vel);
+
+    // The surface wants to lean against the push; a damped spring chases it.
+    const GAIN = 0.035;
+    const MAX = 0.32;
+    const targetX = THREE.MathUtils.clamp(-s.acc.x * GAIN, -MAX, MAX);
+    const targetZ = THREE.MathUtils.clamp(-s.acc.z * GAIN, -MAX, MAX);
+    const STIFFNESS = 55;
+    const DAMPING = 5;
+    s.tiltVel.x += ((targetX - s.tilt.x) * STIFFNESS - s.tiltVel.x * DAMPING) * dt;
+    s.tiltVel.y += ((targetZ - s.tilt.y) * STIFFNESS - s.tiltVel.y * DAMPING) * dt;
+    s.tilt.x = THREE.MathUtils.clamp(s.tilt.x + s.tiltVel.x * dt, -MAX, MAX);
+    s.tilt.y = THREE.MathUtils.clamp(s.tilt.y + s.tiltVel.y * dt, -MAX, MAX);
+
+    // The slope lives in world space; the liquid mesh spins with the bottle,
+    // so rotate the slope into the mesh's own frame before handing it over.
+    g.getWorldQuaternion(s.q).invert();
+    s.local.set(s.tilt.x, 0, s.tilt.y).applyQuaternion(s.q);
+    slosh.value.set(s.local.x, s.local.z);
   });
 
   return (

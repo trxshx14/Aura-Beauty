@@ -10,6 +10,7 @@ import Hotspots from "../components/ui/Hotspots";
 import CustomCursor from "../components/ui/CustomCursor";
 import PerfHud from "../components/ui/PerfHud";
 import BagDrawer, { type BagLine } from "../components/ui/BagDrawer";
+import SwatchStroke from "../components/ui/SwatchStroke";
 
 const ThreeScene = dynamic(() => import("../components/ThreeScene"), {
   ssr: false,
@@ -395,13 +396,21 @@ export default function Page() {
                 <p className="mb-4 text-xs font-medium uppercase tracking-[0.35em] text-[#C97B5D]">
                   02 — The Clean Formula
                 </p>
+                {/* Each line rises out of its own mask, on the scroll timeline
+                    — the same reveal as the hero headline. */}
                 <h2 className="[font-family:var(--font-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-light leading-[1.05]">
-                  Seven
-                  <br />
-                  ingredients.
-                  <br />
-                  <span data-soft-scroll className="soft-type italic text-[#C97B5D]">
-                    Zero noise.
+                  <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em]">
+                    <span data-line="formula" className="block">Seven</span>
+                  </span>
+                  <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em]">
+                    <span data-line="formula" className="block">ingredients.</span>
+                  </span>
+                  <span className="-mb-[0.12em] block overflow-hidden pb-[0.12em] pr-[0.2em]">
+                    <span data-line="formula" className="block">
+                      <span data-soft-scroll className="soft-type italic text-[#C97B5D]">
+                        Zero noise.
+                      </span>
+                    </span>
                   </span>
                 </h2>
                 <p className="mt-6 max-w-sm text-sm leading-relaxed text-[#2B2927]/60">
@@ -484,9 +493,17 @@ export default function Page() {
               </p>
 
               <div className="min-h-[7.5rem] md:min-h-[9rem]">
-                <p className="[font-family:var(--font-display)] text-2xl italic text-[#2B2927]/45 md:text-3xl">
-                  {activeShade.id} —
-                </p>
+                <div className="-mb-[0.12em] overflow-hidden pb-[0.12em]">
+                  <div data-line="shades">
+                    <span className="block [font-family:var(--font-display)] text-2xl italic text-[#2B2927]/45 md:text-3xl">
+                      {activeShade.id} —
+                    </span>
+                  </div>
+                </div>
+                {/* The wrapper persists across shade changes (the scroll reveal
+                    targets it); the keyed h2 inside remounts to replay fade-up. */}
+                <div className="-mb-[0.12em] overflow-hidden pb-[0.12em] pr-[0.2em]">
+                  <div data-line="shades">
                 <h2
                   key={activeShade.id}
                   className="soft-type animate-fade-up [font-family:var(--font-display)] text-[clamp(3rem,7vw,6.5rem)] font-light italic leading-none tracking-tight"
@@ -500,14 +517,17 @@ export default function Page() {
                 >
                   {activeShade.name}
                 </h2>
+                  </div>
+                </div>
               </div>
               <p className="mt-4 max-w-sm text-sm text-[#2B2927]/55">
                 {activeShade.note} Select a shade — the serum tints in real
                 time.
               </p>
 
-              <div className="mt-10 flex items-center gap-5">
-                {SHADES.map((shade) => {
+              {/* Swatches: swiped strokes of serum rather than flat dots. */}
+              <div className="mt-10 flex flex-wrap items-end gap-x-3 gap-y-4">
+                {SHADES.map((shade, i) => {
                   const isActive = shade.id === activeShade.id;
                   return (
                     <button
@@ -517,23 +537,27 @@ export default function Page() {
                       onClick={() => selectShade(shade)}
                       aria-label={`Select shade ${shade.id} ${shade.name}`}
                       aria-pressed={isActive}
-                      className="group flex flex-col items-center gap-2 focus:outline-none"
+                      className="group flex flex-col items-center gap-2 rounded-xl px-1 pt-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B2927] focus-visible:ring-offset-4 focus-visible:ring-offset-[#FBF7F4]"
                     >
                       <span
-                        className={`block h-12 w-12 rounded-full transition-all duration-300 group-focus-visible:ring-2 group-focus-visible:ring-[#2B2927] group-focus-visible:ring-offset-4 group-focus-visible:ring-offset-[#FBF7F4] ${
-                          isActive
-                            ? "scale-110 ring-2 ring-[#2B2927] ring-offset-4 ring-offset-[#FBF7F4]"
-                            : "ring-1 ring-[#2B2927]/15 group-hover:scale-105"
+                        className={`block transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                          isActive ? "-translate-y-2 scale-110" : "group-hover:-translate-y-1"
                         }`}
-                        style={{ backgroundColor: shade.hex }}
-                      />
+                      >
+                        <SwatchStroke hex={shade.hex} index={i} className="h-10 w-24" />
+                      </span>
                       <span
                         className={`text-[10px] uppercase tracking-[0.2em] transition-opacity duration-300 ${
-                          isActive ? "opacity-100" : "opacity-40"
+                          isActive ? "opacity-100" : "opacity-40 group-hover:opacity-70"
                         }`}
                       >
                         {shade.id}
                       </span>
+                      {/* active marker */}
+                      <span
+                        aria-hidden
+                        className={`h-px bg-[#2B2927] transition-all duration-500 ${isActive ? "w-6" : "w-0"}`}
+                      />
                     </button>
                   );
                 })}
@@ -565,12 +589,19 @@ export default function Page() {
                 04 — The Collection
               </p>
               <h2 className="[font-family:var(--font-display)] text-[clamp(2rem,4vw,3.75rem)] font-light leading-tight tracking-tight">
-                Four shades.{" "}
-                <span
-                  className="soft-type italic text-[#C97B5D]"
-                  style={{ ["--soft" as string]: 100, ["--wonk" as string]: 1 }}
-                >
-                  One ritual.
+                <span className="-mb-[0.12em] inline-block overflow-hidden pb-[0.12em] align-bottom">
+                  <span data-line="finale" className="inline-block">
+                    Four shades.
+                  </span>
+                </span>{" "}
+                <span className="-mb-[0.12em] inline-block overflow-hidden pb-[0.12em] pr-[0.2em] align-bottom">
+                  <span
+                    data-line="finale"
+                    className="soft-type inline-block italic text-[#C97B5D]"
+                    style={{ ["--soft" as string]: 100, ["--wonk" as string]: 1 }}
+                  >
+                    One ritual.
+                  </span>
                 </span>
               </h2>
             </div>

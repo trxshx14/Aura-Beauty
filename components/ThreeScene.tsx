@@ -608,6 +608,13 @@ function ScrollRig({
         .to(overlayState, { dof: 4.5, duration: 0.5 }, 0.35)
         .to("[data-panel='hero']", { autoAlpha: 0, y: -40, duration: 0.35 }, 0.05)
         .fromTo("[data-panel='formula']", { autoAlpha: 0, y: 56 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 0.5)
+        // Headline lines rise out of their masks, like the hero's intro
+        .fromTo(
+          "[data-line='formula']",
+          { yPercent: 115 },
+          { yPercent: 0, duration: 0.35, stagger: 0.07, ease: "power3.out" },
+          0.5
+        )
         .fromTo(
           "[data-formula-row]",
           { autoAlpha: 0, x: -24 },
@@ -642,6 +649,12 @@ function ScrollRig({
         .to(ring.scale, { x: 0.9, y: 0.9, z: 0.9, duration: 1 }, 1)
         .to(sphere.position, { x: -vw * 0.02, y: -0.95, z: -1.4, duration: 1 }, 1)
         .fromTo("[data-panel='shades']", { autoAlpha: 0, y: 56 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 1.5)
+        .fromTo(
+          "[data-line='shades']",
+          { yPercent: 115 },
+          { yPercent: 0, duration: 0.35, stagger: 0.08, ease: "power3.out" },
+          1.5
+        )
         .to("[data-progress='2']", { opacity: 0.35, duration: 0.2 }, 1.5)
         .to("[data-progress='3']", { opacity: 1, duration: 0.2 }, 1.5);
 
@@ -658,6 +671,12 @@ function ScrollRig({
         .to(sphere.position, { x: vw * 0.48, y: -1.05, z: -2.5, duration: 0.8 }, 2.0)
         .set(lineup, { visible: true }, 2.05)
         .fromTo("[data-panel='finale']", { autoAlpha: 0, y: 40 }, { autoAlpha: 1, y: 0, duration: 0.4 }, 2.55)
+        .fromTo(
+          "[data-line='finale']",
+          { yPercent: 115 },
+          { yPercent: 0, duration: 0.35, stagger: 0.1, ease: "power3.out" },
+          2.55
+        )
         .to("[data-progress='3']", { opacity: 0.35, duration: 0.2 }, 2.5)
         .to("[data-progress='4']", { opacity: 1, duration: 0.2 }, 2.5);
 
